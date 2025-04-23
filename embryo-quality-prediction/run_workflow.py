@@ -110,6 +110,24 @@ def main():
         print("Workflow stopped due to error in split_dataset.py")
         return
     
+    # Verify split directories exist and contain data
+    split_dir = path.join(PROJECT_ROOT, "data", "split")
+    train_dir = path.join(split_dir, "train")
+    val_dir = path.join(split_dir, "val")
+    test_dir = path.join(split_dir, "test")
+    
+    if not (path.exists(train_dir) and path.exists(val_dir) and path.exists(test_dir)):
+        print("\n⚠️ Warning: Split directories are missing. Running split_dataset again...")
+        if not run_module("split_dataset"):
+            print("Workflow stopped due to error in split_dataset.py")
+            return
+        
+        # Double-check after running split_dataset
+        if not (path.exists(train_dir) and path.exists(val_dir) and path.exists(test_dir)):
+            print("\n❌ Error: Split directories still missing after running split_dataset.py")
+            print("Please ensure you have data in the 'data/augmented' directory")
+            return
+    
     # Phase 2: Model Development
     print_section_header("PHASE 2: MODEL DEVELOPMENT")
     
