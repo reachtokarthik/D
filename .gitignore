@@ -2,5 +2,4 @@ embryo-quality-prediction/data/augmented
 embryo-quality-prediction/data/processed
 embryo-quality-prediction/data/sorted
 embryo-quality-prediction/data/normalized
-embryo-quality-prediction/data/split
 embryo-quality-prediction/src/__pycache__
