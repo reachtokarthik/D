@@ -76,6 +76,26 @@ The project classifies embryos into the following categories:
    pip install -r requirements.txt
    ```
 
+### Downloading Model Files
+
+The trained model files are too large to be stored in GitHub (>600MB each). After cloning the repository, you need to download these files separately:
+
+1. Run the provided download script:
+   ```bash
+   python download_models.py
+   ```
+
+2. Before running the script for the first time, you need to update it with the actual URLs where you've hosted the model files. Edit `download_models.py` and replace the placeholder URLs with actual download links.
+
+3. Recommended hosting options for large model files:
+   - Google Drive
+   - Dropbox
+   - Hugging Face Model Hub
+   - AWS S3
+   - Azure Blob Storage
+
+**Note:** The model files are essential for running the evaluation dashboard and single image validation. Make sure to download them before using these features.
+
 ### Data Preparation
 
 1. Place your raw embryo images in the `data/raw` directory
