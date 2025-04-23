@@ -3,3 +3,13 @@ embryo-quality-prediction/data/processed
 embryo-quality-prediction/data/sorted
 embryo-quality-prediction/data/normalized
 embryo-quality-prediction/src/__pycache__
+embryo-quality-prediction/outputs/predictions
+embryo-quality-prediction/uploads
+embryo-quality-prediction/app/static/uploads
+
+# Models
+embryo-quality-prediction/models
+
+# Output
+embryo-quality-prediction/outputs
+

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validate Embryo Images - Embryo Quality Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #4a6fa5;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        .btn-primary {
+            background-color: #4a6fa5;
+            border-color: #4a6fa5;
+        }
+        .btn-primary:hover {
+            background-color: #3a5a8f;
+            border-color: #3a5a8f;
+        }
+        .file-upload {
+            position: relative;
+            overflow: hidden;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .file-upload input[type=file] {
+            position: absolute;
+            top: 0;
+            right: 0;
+            min-width: 100%;
+            min-height: 100%;
+            font-size: 100px;
+            text-align: right;
+            filter: alpha(opacity=0);
+            opacity: 0;
+            outline: none;
+            background: white;
+            cursor: pointer;
+            display: block;
+        }
+        .file-upload-btn {
+            width: 100%;
+            margin: 0;
+            color: #fff;
+            background: #4a6fa5;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            transition: all .2s ease;
+            outline: none;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .file-upload-content {
+            display: none;
+            text-align: center;
+        }
+        .file-upload-input {
+            position: absolute;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            opacity: 0;
+            cursor: pointer;
+        }
+        .image-upload-wrap {
+            margin-top: 20px;
+            border: 4px dashed #4a6fa5;
+            position: relative;
+            border-radius: 10px;
+        }
+        .image-dropping,
+        .image-upload-wrap:hover {
+            background-color: #e9f0f8;
+            border: 4px dashed #3a5a8f;
+        }
+        .image-title-wrap {
+            padding: 0 15px 15px 15px;
+            color: #222;
+        }
+        .drag-text {
+            text-align: center;
+            padding: 60px 0;
+        }
+        .drag-text h3 {
+            font-weight: 100;
+            color: #4a6fa5;
+            padding: 60px 0;
+        }
+        .file-upload-image {
+            max-height: 200px;
+            max-width: 200px;
+            margin: auto;
+            padding: 20px;
+        }
+        /* Loading Spinner */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            color: white;
+            display: none;
+        }
+        .spinner {
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: 1rem;
+        }
+        .loading-text {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Spinner Overlay -->
+    <div class="spinner-overlay" id="spinnerOverlay">
+        <div class="spinner-border spinner text-light" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="loading-text" id="spinnerMessage">Processing...</div>
+    </div>
+    
+    <div class="container">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="display-4">Embryo Quality Prediction</h1>
+                <h2 class="text-muted">Validate Individual Embryo Images</h2>
+            </div>
+        </div>
+        
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Navigation -->
+        <div class="row mb-4">
+            <div class="col">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Validate Images</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+        
+        <!-- Upload Form -->
+        <div class="row mb-4">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-image"></i> Upload Embryo Image for Validation
+                    </div>
+                    <div class="card-body">
+                        <form method="post" enctype="multipart/form-data">
+                            {% if models %}
+                            <div class="mb-4">
+                                <label for="model_select" class="form-label">Select Model for Prediction</label>
+                                <select class="form-select" id="model_select" name="model_path">
+                                    {% for model in models %}
+                                    <option value="{{ model.path }}" {% if loop.first %}selected{% endif %}>
+                                        {{ model.name }} ({{ model.modified }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">Choose the model you want to use for prediction.</div>
+                            </div>
+                                                        <!-- Simple File Upload with Preview -->
+                                <div class="card mb-4">
+                                    <div class="card-body">
+                                        <div id="upload-area" class="text-center p-5 border border-2 border-primary rounded mb-3" style="border-style: dashed !important;">
+                                            <i class="bi bi-cloud-arrow-up-fill fs-1 text-primary"></i>
+                                            <h5 class="mt-3">Drag and drop an embryo image or click to select</h5>
+                                            <input type="file" id="fileInput" name="file" class="d-none" accept="image/*">
+                                            <button type="button" id="browseBtn" class="btn btn-outline-primary mt-3">
+                                                <i class="bi bi-folder"></i> Browse Files
+                                            </button>
+                                        </div>
+                                        
+                                        <div id="preview-area" class="d-none">
+                                            <div class="text-center mb-3">
+                                                <img id="preview-image" src="#" alt="Preview" class="img-fluid rounded" style="max-height: 300px;">
+                                            </div>
+                                            
+                                            <div class="alert alert-info">
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <p class="mb-1"><i class="bi bi-file-earmark"></i> <strong>Filename:</strong> <span id="filename-display">-</span></p>
+                                                        <p class="mb-1"><i class="bi bi-hdd"></i> <strong>Size:</strong> <span id="filesize-display">-</span></p>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <p class="mb-1"><i class="bi bi-aspect-ratio"></i> <strong>Dimensions:</strong> <span id="dimensions-display">-</span></p>
+                                                        <p class="mb-1"><i class="bi bi-file-earmark-image"></i> <strong>Type:</strong> <span id="filetype-display">-</span></p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="d-flex justify-content-between">
+                                                <button type="button" id="remove-btn" class="btn btn-outline-danger">
+                                                    <i class="bi bi-x-circle"></i> Remove Image
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn btn-primary mt-4 w-100" type="submit" id="validateBtn" onclick="return validateImage()">
+                                    <i class="bi bi-check-circle"></i> Validate Image
+                                </button>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i> No trained models found. Please train a model first.
+                            </div>
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                                <i class="bi bi-arrow-left"></i> Back to Dashboard
+                            </a>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="row mb-4">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-info-circle"></i> Instructions
+                    </div>
+                    <div class="card-body">
+                        <h5>How to Use the Validation Tool</h5>
+                        <ol>
+                            <li>Select a trained model from the dropdown (the latest model is selected by default)</li>
+                            <li>Upload an embryo image by dragging and dropping or clicking the upload area</li>
+                            <li>Click "Validate Image" to get the model's prediction</li>
+                            <li>View the results showing predicted class and confidence scores</li>
+                        </ol>
+                        
+                        <h5 class="mt-4">Supported Image Formats</h5>
+                        <p>The following image formats are supported:</p>
+                        <ul>
+                            <li>JPEG (.jpg, .jpeg)</li>
+                            <li>PNG (.png)</li>
+                            <li>TIFF (.tif, .tiff)</li>
+                        </ul>
+                        
+                        <h5 class="mt-4">Tips for Best Results</h5>
+                        <ul>
+                            <li>Use clear, well-focused images of embryos</li>
+                            <li>Ensure the embryo is centered in the frame</li>
+                            <li>Use images with similar characteristics to those used in training</li>
+                            <li>For low-confidence predictions, try using a different model or improving image quality</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="text-center text-muted my-4">
+            <p>Embryo Quality Prediction Project | Image Validation Tool</p>
+        </footer>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Format file size in KB, MB, etc.
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Initialize the file upload functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('fileInput');
+            const browseBtn = document.getElementById('browseBtn');
+            const previewArea = document.getElementById('preview-area');
+            const previewImage = document.getElementById('preview-image');
+            const filenameDisplay = document.getElementById('filename-display');
+            const filesizeDisplay = document.getElementById('filesize-display');
+            const dimensionsDisplay = document.getElementById('dimensions-display');
+            const filetypeDisplay = document.getElementById('filetype-display');
+            const removeBtn = document.getElementById('remove-btn');
+            const validateBtn = document.getElementById('validateBtn');
+            
+            // Disable validate button initially
+            validateBtn.disabled = true;
+            
+            // Click browse button to trigger file input
+            browseBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // Handle file selection
+            fileInput.addEventListener('change', function() {
+                handleFileUpload(this.files);
+            });
+            
+            // Handle drag and drop
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.add('border-success');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('border-success');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.classList.remove('border-success');
+                
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileUpload(e.dataTransfer.files);
+                }
+            });
+            
+            // Handle remove button
+            removeBtn.addEventListener('click', function() {
+                resetUpload();
+            });
+            
+            // Process the uploaded file
+            function handleFileUpload(files) {
+                if (!files || !files[0]) {
+                    return;
+                }
+                
+                const file = files[0];
+                
+                // Show loading spinner
+                showSpinner('Loading image preview...');
+                
+                // Display file information
+                filenameDisplay.textContent = file.name;
+                filesizeDisplay.textContent = formatFileSize(file.size);
+                filetypeDisplay.textContent = file.type;
+                
+                // Create file reader for preview
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    // Create image to get dimensions
+                    const img = new Image();
+                    img.onload = function() {
+                        dimensionsDisplay.textContent = this.width + ' × ' + this.height + ' pixels';
+                        hideSpinner();
+                    };
+                    
+                    // Set preview image source
+                    previewImage.src = e.target.result;
+                    img.src = e.target.result;
+                    
+                    // Show preview area, hide upload area
+                    uploadArea.classList.add('d-none');
+                    previewArea.classList.remove('d-none');
+                    
+                    // Enable validate button
+                    validateBtn.disabled = false;
+                    
+                    console.log('Image loaded: ' + file.name);
+                };
+                
+                reader.onerror = function() {
+                    alert('Error reading file. Please try another image.');
+                    resetUpload();
+                    hideSpinner();
+                };
+                
+                reader.readAsDataURL(file);
+            }
+            
+            // Reset the upload form
+            function resetUpload() {
+                fileInput.value = '';
+                previewImage.src = '#';
+                filenameDisplay.textContent = '-';
+                filesizeDisplay.textContent = '-';
+                dimensionsDisplay.textContent = '-';
+                filetypeDisplay.textContent = '-';
+                
+                previewArea.classList.add('d-none');
+                uploadArea.classList.remove('d-none');
+                
+                validateBtn.disabled = true;
+            }
+        });
+        
+        // Function to show the spinner overlay
+        function showSpinner(message) {
+            const overlay = document.getElementById('spinnerOverlay');
+            const spinnerMessage = document.getElementById('spinnerMessage');
+            if (overlay && spinnerMessage) {
+                overlay.style.display = 'flex';
+                spinnerMessage.innerText = message || 'Loading...';
+                console.log('Showing spinner with message: ' + message);
+            } else {
+                console.error('Spinner elements not found');
+            }
+        }
+        
+        // Function to hide the spinner overlay
+        function hideSpinner() {
+            const overlay = document.getElementById('spinnerOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                console.log('Hiding spinner');
+            }
+        }
+        
+        // Function to validate the image
+        function validateImage() {
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput.files && fileInput.files[0]) {
+                console.log('Validating image...');
+                showSpinner('Analyzing embryo image...');
+                return true;
+            } else {
+                alert('Please select an image to validate');
+                return false;
+            }
+        }
+    </script>
+</body>
+</html>
