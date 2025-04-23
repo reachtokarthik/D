@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 SCRIPT_DIR = path.dirname(path.abspath(__file__))
 PROJECT_ROOT = path.dirname(SCRIPT_DIR)
 
-# Source directory (normalized images)
-SOURCE_DIR = path.join(PROJECT_ROOT, "data", "normalized")
+# Source directory (augmented images)
+SOURCE_DIR = path.join(PROJECT_ROOT, "data", "augmented")
 
 # Output directories
 OUTPUT_BASE = path.join(PROJECT_ROOT, "data", "split")
