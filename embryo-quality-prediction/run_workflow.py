@@ -116,17 +116,28 @@ def main():
     val_dir = path.join(split_dir, "val")
     test_dir = path.join(split_dir, "test")
     
-    if not (path.exists(train_dir) and path.exists(val_dir) and path.exists(test_dir)):
-        print("\n⚠️ Warning: Split directories are missing. Running split_dataset again...")
+    # Check if directories exist and contain class subdirectories
+    train_has_classes = path.exists(train_dir) and len(os.listdir(train_dir)) > 0
+    val_has_classes = path.exists(val_dir) and len(os.listdir(val_dir)) > 0
+    test_has_classes = path.exists(test_dir) and len(os.listdir(test_dir)) > 0
+    
+    if not (train_has_classes and val_has_classes and test_has_classes):
+        print("\n⚠️ Warning: Split directories are missing or empty. Running split_dataset again...")
         if not run_module("split_dataset"):
             print("Workflow stopped due to error in split_dataset.py")
             return
         
         # Double-check after running split_dataset
-        if not (path.exists(train_dir) and path.exists(val_dir) and path.exists(test_dir)):
-            print("\n❌ Error: Split directories still missing after running split_dataset.py")
+        train_has_classes = path.exists(train_dir) and len(os.listdir(train_dir)) > 0
+        val_has_classes = path.exists(val_dir) and len(os.listdir(val_dir)) > 0
+        test_has_classes = path.exists(test_dir) and len(os.listdir(test_dir)) > 0
+        
+        if not (train_has_classes and val_has_classes and test_has_classes):
+            print("\n❌ Error: Split directories still missing or empty after running split_dataset.py")
             print("Please ensure you have data in the 'data/augmented' directory")
             return
+        else:
+            print("\n✅ Split directories successfully created and contain data.")
     
     # Phase 2: Model Development
     print_section_header("PHASE 2: MODEL DEVELOPMENT")
