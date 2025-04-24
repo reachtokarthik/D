@@ -21,9 +21,52 @@ from os import path
 from datetime import datetime
 import torch
 
+# Check if running in Google Colab
+IN_COLAB = 'google.colab' in str(globals())
+
 # Get the absolute path to the project root directory
 SCRIPT_DIR = path.dirname(path.abspath(__file__))
-PROJECT_ROOT = SCRIPT_DIR
+
+# Set project root based on environment
+if IN_COLAB:
+    try:
+        from google.colab import drive
+        print("Google Colab detected. Mounting Google Drive...")
+        drive.mount('/content/drive')
+        
+        # Ask user for project location in Google Drive
+        print("\nPlease specify the location of the project in Google Drive:")
+        print("1. /content/drive/MyDrive/embryo-quality-prediction (default)")
+        print("2. /content/embryo-quality-prediction")
+        print("3. Specify custom path")
+        
+        drive_option = input("\nSelect option (1-3) or press Enter for default: ")
+        
+        if drive_option == "" or drive_option == "1":
+            PROJECT_ROOT = "/content/drive/MyDrive/embryo-quality-prediction"
+        elif drive_option == "2":
+            PROJECT_ROOT = "/content/embryo-quality-prediction"
+        elif drive_option == "3":
+            custom_path = input("Enter the full path to the project: ")
+            PROJECT_ROOT = custom_path
+        else:
+            PROJECT_ROOT = "/content/drive/MyDrive/embryo-quality-prediction"
+            
+        print(f"Project root set to: {PROJECT_ROOT}")
+        
+        # Create project directory if it doesn't exist
+        os.makedirs(PROJECT_ROOT, exist_ok=True)
+        
+        # Install required packages if in Colab
+        print("\nInstalling required packages...")
+        !pip install -q torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch
+        print("Package installation complete.")
+        
+    except ImportError:
+        print("Google Colab detected but drive module not available.")
+        PROJECT_ROOT = "/content/embryo-quality-prediction"
+else:
+    PROJECT_ROOT = SCRIPT_DIR
 
 # Add src directory to path for imports
 sys.path.append(path.join(PROJECT_ROOT, "src"))
@@ -57,6 +100,33 @@ def run_module(module_name, module_path=None):
         elapsed_time = time.time() - start_time
         print(f"\n✅ {module_name} completed successfully in {elapsed_time:.2f} seconds")
         return True
+    except ImportError as ie:
+        if IN_COLAB:
+            print(f"\n⚠️ Import error in {module_name}: {str(ie)}")
+            print("This may be due to missing packages in Colab environment.")
+            print("Installing required packages...")
+            !pip install -q torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch
+            print("Retrying import...")
+            try:
+                if module_path:
+                    sys.path.insert(0, path.dirname(module_path))
+                    module = importlib.import_module(path.basename(module_path).replace('.py', ''))
+                    sys.path.pop(0)
+                else:
+                    module = importlib.import_module(f"src.{module_name}")
+                
+                if hasattr(module, 'main'):
+                    module.main()
+                
+                elapsed_time = time.time() - start_time
+                print(f"\n✅ {module_name} completed successfully in {elapsed_time:.2f} seconds")
+                return True
+            except Exception as e2:
+                print(f"\n❌ Error in {module_name} after package installation: {str(e2)}")
+                return False
+        else:
+            print(f"\n❌ Import error in {module_name}: {str(ie)}")
+            return False
     except Exception as e:
         print(f"\n❌ Error in {module_name}: {str(e)}")
         return False
@@ -198,21 +268,22 @@ def main():
             "6": "efficientvit"
         }
         
+        # Always show model selection options, regardless of mode
+        print_section_header("MODEL SELECTION")
+        print("Select a model architecture for training:")
+        print("1. ResNet152 (default)")
+        print("2. DenseNet201")
+        print("3. EfficientNet-B7")
+        print("4. ConvNeXt Base")
+        print("5. SwinV2")
+        print("6. EfficientViT")
+        
         if workflow_mode == "automatic":
-            # In automatic mode, use the default model (ResNet152)
+            # In automatic mode, still show options but use default without prompting
             model_choice = "resnet152"
             print(f"\nAutomatic mode selected: {model_choice} model")
         else:
             # Interactive mode - prompt user for selection
-            print_section_header("MODEL SELECTION")
-            print("Select a model architecture for training:")
-            print("1. ResNet152 (default)")
-            print("2. DenseNet201")
-            print("3. EfficientNet-B7")
-            print("4. ConvNeXt Base")
-            print("5. SwinV2")
-            print("6. EfficientViT")
-            
             while True:
                 try:
                     selection = input("\nSelect which model to use (enter the number or press Enter for default): ")
@@ -363,15 +434,59 @@ def main():
     
     # For non-step-by-step modes, we need to run the phases in order
     if workflow_mode != "step_by_step":
+        # Phase 1: Data Preparation
+        print_section_header("PHASE 1: DATA PREPARATION")
+        
+        # Run all data preparation steps
+        data_prep_steps = [step for step in workflow_steps if step['phase'] == "Data Preparation" and step['name'] != "Select dataset"]
+        for step in data_prep_steps:
+            if step['module'] is not None:
+                if not run_module(step['module']):
+                    print(step['error_msg'])
+                    return
+            elif step['function'] is not None:
+                if not step['function']():
+                    print(step['error_msg'])
+                    return
+        
+        # Verify split directories exist and contain data
+        split_dir = path.join(PROJECT_ROOT, "data", "split")
+        train_dir = path.join(split_dir, "train")
+        val_dir = path.join(split_dir, "val")
+        test_dir = path.join(split_dir, "test")
+        
+        # Check if directories exist and contain class subdirectories
+        train_has_classes = path.exists(train_dir) and len(os.listdir(train_dir)) > 0
+        val_has_classes = path.exists(val_dir) and len(os.listdir(val_dir)) > 0
+        test_has_classes = path.exists(test_dir) and len(os.listdir(test_dir)) > 0
+        
+        if not (train_has_classes and val_has_classes and test_has_classes):
+            print("\n⚠️ Warning: Split directories are missing or empty. Running split_dataset again...")
+            if not run_module("split_dataset"):
+                print("Workflow stopped due to error in split_dataset.py")
+                return
+            
+            # Double-check after running split_dataset
+            train_has_classes = path.exists(train_dir) and len(os.listdir(train_dir)) > 0
+            val_has_classes = path.exists(val_dir) and len(os.listdir(val_dir)) > 0
+            test_has_classes = path.exists(test_dir) and len(os.listdir(test_dir)) > 0
+            
+            if not (train_has_classes and val_has_classes and test_has_classes):
+                print("\n❌ Error: Split directories still missing or empty after running split_dataset.py")
+                print("Please ensure you have data in the 'data/augmented' directory")
+                return
+            else:
+                print("\n✅ Split directories successfully created and contain data.")
+        
         # Phase 2: Model Development
         print_section_header("PHASE 2: MODEL DEVELOPMENT")
+        
+        # Always select model first, regardless of mode
+        select_model()
         
         # Check GPU availability before training
         if not check_gpu_for_training():
             return
-        
-        # Select model
-        select_model()
         
         # Train model
         if not run_module("train_model"):
@@ -384,4 +499,16 @@ def main():
     print("All steps executed successfully!")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nWorkflow interrupted by user.")
+    except Exception as e:
+        import traceback
+        print(f"\nUnexpected error: {str(e)}")
+        traceback.print_exc()
+        print("\nIf you're running in Google Colab and encountering package-related errors,")
+        print("try running the following commands in a separate cell:")
+        print("!pip install --force-reinstall blinker")
+        print("!pip install --ignore-installed torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch")
+        print("Then restart the runtime (Runtime > Restart runtime) and run the workflow again.")
