@@ -79,6 +79,36 @@ def main():
     os.makedirs(path.join(PROJECT_ROOT, "outputs", "plots"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "outputs", "results"), exist_ok=True)
     
+    # Ask user for workflow mode
+    print_section_header("WORKFLOW MODE SELECTION")
+    print("Select workflow mode:")
+    print("1. Automatic mode (use default values for all selections)")
+    print("2. Interactive mode (prompt for each selection)")
+    print("3. Step-by-Step mode (run each workflow step individually)")
+    
+    # Default to interactive mode
+    workflow_mode = "interactive"
+    
+    while True:
+        try:
+            mode_selection = input("\nSelect mode (1-3) or press Enter for interactive mode: ")
+            if mode_selection == "" or mode_selection == "2":
+                workflow_mode = "interactive"
+                print("Selected: Interactive mode")
+                break
+            elif mode_selection == "1":
+                workflow_mode = "automatic"
+                print("Selected: Automatic mode")
+                break
+            elif mode_selection == "3":
+                workflow_mode = "step_by_step"
+                print("Selected: Step-by-Step mode")
+                break
+            else:
+                print("Invalid selection. Please try again.")
+        except ValueError:
+            print("Please enter a valid number.")
+    
     # Check if data directories exist and provide dataset selection options
     roboflow_dir = path.join(PROJECT_ROOT, "data", "raw", "roboflow")
     other_dir = path.join(PROJECT_ROOT, "data", "raw", "other")
@@ -96,71 +126,211 @@ def main():
         if user_input.lower() != 'y':
             print("Workflow stopped due to missing data")
             return
-    else:
-        print("\n" + "=" * 50)
-        print("DATASET SELECTION")
-        print("=" * 50)
-        
+    
+    # Function to handle dataset selection
+    def select_dataset():
         available_options = []
         if roboflow_has_data:
             available_options.append("roboflow")
-            print("1. Roboflow dataset (original dataset)")
         
         if other_has_data:
             available_options.append("other")
-            print(f"{2 if roboflow_has_data else 1}. Other dataset (new dataset)")
         
         if roboflow_has_data and other_has_data:
             available_options.append("both")
-            print("3. Both datasets")
+        
+        # In automatic mode, choose the most comprehensive option available
+        if workflow_mode == "automatic":
+            if "both" in available_options:
+                dataset_choice = "both"
+            elif "roboflow" in available_options:
+                dataset_choice = "roboflow"
+            elif "other" in available_options:
+                dataset_choice = "other"
+            else:
+                dataset_choice = ""
+            
+            print(f"\nAutomatic mode selected: {dataset_choice.capitalize() if dataset_choice else 'No'} dataset")
+            os.environ["EMBRYO_DATASET_SELECTION"] = dataset_choice
+            return True
+        else:
+            # Interactive mode - prompt user for selection
+            print("\n" + "=" * 50)
+            print("DATASET SELECTION")
+            print("=" * 50)
+            
+            if roboflow_has_data:
+                print("1. Roboflow dataset (original dataset)")
+            
+            if other_has_data:
+                print(f"{2 if roboflow_has_data else 1}. Other dataset (new dataset)")
+            
+            if roboflow_has_data and other_has_data:
+                print("3. Both datasets")
+            
+            while True:
+                try:
+                    selection = input("\nSelect which dataset to use (enter the number): ")
+                    selection_idx = int(selection) - 1
+                    
+                    if 0 <= selection_idx < len(available_options):
+                        dataset_choice = available_options[selection_idx]
+                        print(f"Selected: {dataset_choice.capitalize()} dataset")
+                        os.environ["EMBRYO_DATASET_SELECTION"] = dataset_choice
+                        return True
+                    else:
+                        print("Invalid selection. Please try again.")
+                except ValueError:
+                    print("Please enter a valid number.")
+    
+    # Only select dataset now if not in step-by-step mode
+    if workflow_mode != "step_by_step":
+        select_dataset()
+    
+    # Define model selection function
+    def select_model():
+        model_mapping = {
+            "1": "resnet152",
+            "2": "densenet201",
+            "3": "efficientnet_b7",
+            "4": "convnext_base",
+            "5": "swinv2",
+            "6": "efficientvit"
+        }
+        
+        if workflow_mode == "automatic":
+            # In automatic mode, use the default model (ResNet152)
+            model_choice = "resnet152"
+            print(f"\nAutomatic mode selected: {model_choice} model")
+        else:
+            # Interactive mode - prompt user for selection
+            print_section_header("MODEL SELECTION")
+            print("Select a model architecture for training:")
+            print("1. ResNet152 (default)")
+            print("2. DenseNet201")
+            print("3. EfficientNet-B7")
+            print("4. ConvNeXt Base")
+            print("5. SwinV2")
+            print("6. EfficientViT")
+            
+            while True:
+                try:
+                    selection = input("\nSelect which model to use (enter the number or press Enter for default): ")
+                    if selection == "":
+                        model_choice = "resnet152"  # Default
+                        break
+                    
+                    if selection in model_mapping:
+                        model_choice = model_mapping[selection]
+                        break
+                    else:
+                        print("Invalid selection. Please try again.")
+                except ValueError:
+                    print("Please enter a valid number.")
+            
+            print(f"Selected model: {model_choice}")
+        
+        os.environ["EMBRYO_MODEL_SELECTION"] = model_choice
+        return True
+        
+    # Function to check GPU and confirm training
+    def check_gpu_for_training():
+        print_section_header("GPU CHECK")
+        print("Checking GPU availability...")
+        print(f"CUDA Available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024 / 1024 / 1024:.2f} GB")
+            print("✅ GPU is available for training")
+            return True
+        else:
+            print("⚠️ WARNING: No GPU available. Training will be slow on CPU.")
+            
+            # In automatic mode, proceed with CPU training
+            if workflow_mode == "automatic":
+                print("Automatic mode: Proceeding with CPU training")
+                return True
+            else:
+                # In interactive mode, ask for confirmation
+                user_input = input("Do you want to continue with CPU training? (y/n): ")
+                if user_input.lower() != 'y':
+                    print("Training step skipped due to no GPU availability")
+                    return False
+                return True
+    
+    # Define all workflow steps (combining both phases)
+    workflow_steps = [
+        {"name": "Select dataset", "module": None, "function": select_dataset, "error_msg": "Workflow stopped due to error in dataset selection", "phase": "Data Preparation"},
+        {"name": "Label data", "module": "label", "function": None, "error_msg": "Workflow stopped due to error in label.py", "phase": "Data Preparation"},
+        {"name": "Check image sizes", "module": "check_image_size", "function": None, "error_msg": "Workflow stopped due to error in check_image_size.py", "phase": "Data Preparation"},
+        {"name": "Clean and verify data", "module": "CleanAndVerify", "function": None, "error_msg": "Workflow stopped due to error in CleanAndVerify.py", "phase": "Data Preparation"},
+        {"name": "Augment images", "module": "imgaug", "function": None, "error_msg": "Workflow stopped due to error in imgaug.py", "phase": "Data Preparation"},
+        {"name": "Normalize images", "module": "normalize", "function": None, "error_msg": "Workflow stopped due to error in normalize.py", "phase": "Data Preparation"},
+        {"name": "Split dataset", "module": "split_dataset", "function": None, "error_msg": "Workflow stopped due to error in split_dataset.py", "phase": "Data Preparation"},
+        {"name": "Check GPU availability", "module": None, "function": check_gpu_for_training, "error_msg": "Workflow stopped due to GPU check failure", "phase": "Model Development"},
+        {"name": "Select model architecture", "module": None, "function": select_model, "error_msg": "Workflow stopped due to error in model selection", "phase": "Model Development"},
+        {"name": "Train model", "module": "train_model", "function": None, "error_msg": "Workflow stopped due to error in train_model.py", "phase": "Model Development"}
+    ]
+    
+    # Print workflow phases
+    print_section_header("WORKFLOW PHASES")
+    
+    if workflow_mode == "step_by_step":
+        # Step-by-Step mode: Ask user which step to run
+        print("\nSelect a workflow step to run:")
+        for i, step in enumerate(workflow_steps, 1):
+            print(f"{i}. {step['name']} ({step['phase']})")
+        print(f"{len(workflow_steps) + 1}. Run all steps in sequence")
         
         while True:
             try:
-                selection = input("\nSelect which dataset to use (enter the number): ")
-                selection_idx = int(selection) - 1
+                step_selection = input("\nEnter step number to run (or 'q' to quit): ")
+                if step_selection.lower() == 'q':
+                    print("Workflow stopped by user")
+                    return
                 
-                if 0 <= selection_idx < len(available_options):
-                    dataset_choice = available_options[selection_idx]
-                    print(f"Selected: {dataset_choice.capitalize()} dataset")
-                    os.environ["EMBRYO_DATASET_SELECTION"] = dataset_choice
-                    break
+                step_idx = int(step_selection) - 1
+                if 0 <= step_idx < len(workflow_steps):
+                    # Run single step
+                    step = workflow_steps[step_idx]
+                    print(f"\nRunning step: {step['name']}")
+                    
+                    # Execute the step (either a module or a function)
+                    success = False
+                    if step['module'] is not None:
+                        success = run_module(step['module'])
+                    elif step['function'] is not None:
+                        success = step['function']()
+                    
+                    if not success:
+                        print(step['error_msg'])
+                        return
+                        
+                    print(f"\n✅ Step completed: {step['name']}")
+                    continue  # Ask for next step
+                elif step_idx == len(workflow_steps):
+                    # Run all steps
+                    print("\nRunning all steps in sequence...")
+                    break  # Exit loop and continue with all steps
                 else:
                     print("Invalid selection. Please try again.")
             except ValueError:
                 print("Please enter a valid number.")
     
-    # Phase 1: Data Preparation
-    print_section_header("PHASE 1: DATA PREPARATION")
-    
-    # Step 1: Label data
-    if not run_module("label"):
-        print("Workflow stopped due to error in label.py")
-        return
-    
-    # Step 2: Check image sizes
-    if not run_module("check_image_size"):
-        print("Workflow stopped due to error in check_image_size.py")
-        return
-    
-    # Step 3: Clean and verify data
-    if not run_module("CleanAndVerify"):
-        print("Workflow stopped due to error in CleanAndVerify.py")
-        return
-    
-    # Step 4: Augment images
-    if not run_module("imgaug"):
-        print("Workflow stopped due to error in imgaug.py")
-        return
-    
-    # Step 5: Normalize images (now after augmentation)
-    if not run_module("normalize"):
-        print("Workflow stopped due to error in normalize.py")
-        return
-    
-    # Step 6: Split dataset
-    if not run_module("split_dataset"):
-        print("Workflow stopped due to error in split_dataset.py")
-        return
+    # Run all steps in sequence for automatic, interactive, or if "run all" was selected in step-by-step mode
+    if workflow_mode != "step_by_step" or step_idx == len(workflow_steps):
+        # Skip the dataset selection step since we already did it for non-step-by-step modes
+        steps_to_run = workflow_steps[1:] if workflow_mode != "step_by_step" else workflow_steps
+        
+        for step in steps_to_run:
+            if step['module'] is not None:
+                if not run_module(step['module']):
+                    print(step['error_msg'])
+                    return
+            elif step['function'] is not None:
+                if not step['function']():
+                    print(step['error_msg'])
+                    return
     
     # Verify split directories exist and contain data
     split_dir = path.join(PROJECT_ROOT, "data", "split")
@@ -191,28 +361,22 @@ def main():
         else:
             print("\n✅ Split directories successfully created and contain data.")
     
-    # Phase 2: Model Development
-    print_section_header("PHASE 2: MODEL DEVELOPMENT")
-    
-    # Check GPU availability before training
-    print_section_header("GPU CHECK")
-    print("Checking GPU availability...")
-    print(f"CUDA Available: {torch.cuda.is_available()}")
-    if torch.cuda.is_available():
-        print(f"GPU Name: {torch.cuda.get_device_name(0)}")
-        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024 / 1024 / 1024:.2f} GB")
-        print("✅ GPU is available for training")
-    else:
-        print("⚠️ WARNING: No GPU available. Training will be slow on CPU.")
-        user_input = input("Do you want to continue with CPU training? (y/n): ")
-        if user_input.lower() != 'y':
-            print("Workflow stopped by user due to no GPU availability")
+    # For non-step-by-step modes, we need to run the phases in order
+    if workflow_mode != "step_by_step":
+        # Phase 2: Model Development
+        print_section_header("PHASE 2: MODEL DEVELOPMENT")
+        
+        # Check GPU availability before training
+        if not check_gpu_for_training():
             return
-    
-    # Step 7: Train model
-    if not run_module("train_model"):
-        print("Workflow stopped due to error in train_model.py")
-        return
+        
+        # Select model
+        select_model()
+        
+        # Train model
+        if not run_module("train_model"):
+            print("Workflow stopped due to error in train_model.py")
+            return
     
     # Workflow complete
     print_section_header("WORKFLOW COMPLETE")

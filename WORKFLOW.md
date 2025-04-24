@@ -12,18 +12,46 @@ The embryo classification workflow consists of three main phases:
 2. **Model Development Phase**: Trains, evaluates, and saves a deep learning model for embryo classification
 3. **Evaluation and Deployment Phase**: Provides tools for comprehensive model evaluation, comparison, and single-image validation
 
+### Workflow Mode Selection
+
+The workflow offers three operational modes:
+
+1. **Automatic Mode**: Uses default values for all selections and runs the entire workflow in sequence with minimal user interaction. Ideal for batch processing or when optimal defaults are sufficient.
+
+2. **Interactive Mode**: Prompts the user for each selection (dataset, model architecture), but still runs the entire workflow in sequence. This is the default mode and provides customization while maintaining the automated flow.
+
+3. **Step-by-Step Mode**: Allows running individual workflow steps on demand. This mode gives you complete control to:
+   - Select and run specific steps in any order
+   - Run multiple steps in sequence
+   - Pause between phases to review results
+   - Skip steps that aren't needed for your specific use case
+
+At the start of the workflow, you'll be prompted to select which mode you prefer.
+
+### Dataset Selection
+
+The workflow supports multiple dataset sources:
+
+1. **Roboflow Dataset**: The original dataset with folders like 2-1-1, Morula, Early, etc.
+2. **Other Dataset**: New dataset with a different structure (Blastocyst, Cleavage, Morula, Error image)
+3. **Both Datasets**: Process and combine both datasets
+
+In interactive mode, you'll be prompted to select which dataset(s) to use. In automatic mode, the system will select the most comprehensive option available (both datasets if available, otherwise the single available dataset).
+
 ## Complete Workflow Steps
 
 ### Phase 1: Data Preparation
 
 #### Step 1: Data Labeling (`label.py`)
 - **Purpose**: Organizes and labels raw embryo images into appropriate class folders
-- **Input**: Raw embryo images in `data/raw`
+- **Input**: Raw embryo images in `data/raw/roboflow` and/or `data/raw/other`
 - **Output**: Labeled images in `data/sorted` organized by class
 - **Process**:
-  - Identifies embryo types and quality grades from image metadata or manual annotation
+  - Identifies embryo types and quality grades based on folder structure
+  - Handles multiple dataset formats (roboflow and other)
   - Creates class directories (e.g., `8cell_grade_A`, `blastocyst_grade_A`, etc.)
   - Copies images to their respective class directories
+  - Provides detailed statistics on processed files
 
 #### Step 2: Image Size Checking (`check_image_size.py`)
 - **Purpose**: Verifies image dimensions and reports any inconsistencies
@@ -43,19 +71,9 @@ The embryo classification workflow consists of three main phases:
   - Verifies class balance and reports statistics
   - Ensures all images are properly formatted for further processing
 
-#### Step 4: Image Normalization (`normalize.py`)
-- **Purpose**: Standardizes images for consistent processing
-- **Input**: Cleaned images from `data/sorted`
-- **Output**: Normalized images in `data/normalized`
-- **Process**:
-  - Resizes images to a standard dimension (224×224 pixels)
-  - Applies color normalization to account for staining variations
-  - Enhances contrast and reduces noise
-  - Standardizes pixel values to improve model convergence
-
-#### Step 5: Image Augmentation (`imgaug.py`)
+#### Step 4: Image Augmentation (`imgaug.py`)
 - **Purpose**: Expands the dataset through various transformations
-- **Input**: Normalized images from `data/normalized`
+- **Input**: Cleaned images from `data/sorted`
 - **Output**: Augmented images in `data/augmented`
 - **Process**:
   - Applies random transformations (rotations, flips, color adjustments)
@@ -63,15 +81,27 @@ The embryo classification workflow consists of three main phases:
   - Balances class distribution by generating more samples for underrepresented classes
   - Increases dataset size to improve model generalization
 
+#### Step 5: Image Normalization (`normalize.py`)
+- **Purpose**: Standardizes images for consistent processing
+- **Input**: Original images from `data/sorted` and augmented images from `data/augmented`
+- **Output**: Normalized images in `data/normalized`
+- **Process**:
+  - Resizes images to a standard dimension (224×224 pixels)
+  - Applies color normalization to account for staining variations
+  - Enhances contrast and reduces noise
+  - Standardizes pixel values to improve model convergence
+
 #### Step 6: Dataset Splitting (`split_dataset.py`)
 - **Purpose**: Divides data into training, validation, and test sets
-- **Input**: Augmented images from `data/augmented`
+- **Input**: Normalized images from `data/normalized` (falls back to `data/augmented` or `data/sorted` if needed)
 - **Output**: Split datasets in `data/split/train`, `data/split/val`, and `data/split/test`
 - **Process**:
+  - Intelligently searches for data in multiple directories
   - Performs stratified splitting to maintain class distribution
-  - Allocates approximately 70% for training, 15% for validation, and 15% for testing
+  - Allocates 80% for training, 10% for validation, and 10% for testing
   - Creates separate directories for each split while preserving class structure
   - Ensures no data leakage between splits
+  - Provides detailed verification of copied files
 
 ### Phase 2: Model Development
 
@@ -81,6 +111,21 @@ The embryo classification workflow consists of three main phases:
   - Checks if CUDA is available
   - Reports GPU name and memory if available
   - Warns if training will proceed on CPU (significantly slower)
+
+#### Model Selection
+- **Purpose**: Allows selection of different model architectures for training
+- **Options**:
+  1. **ResNet152** (default): Deep residual network with 152 layers
+  2. **DenseNet201**: Dense convolutional network with 201 layers
+  3. **EfficientNet-B7**: Optimized convolutional network with compound scaling
+  4. **ConvNeXt Base**: Modern convolutional network with transformer-inspired design
+  5. **SwinV2**: Hierarchical vision transformer with shifted windows
+  6. **EfficientViT**: Hybrid architecture combining efficiency of CNNs with vision transformers
+- **Process**:
+  - In interactive mode: Prompts user to select a model architecture
+  - In automatic mode: Uses ResNet152 (default model)
+  - Sets environment variable for model selection
+  - Configures the selected model for training
 
 #### Step 7: Model Training (`train_model.py`)
 - **Purpose**: Trains a deep learning model on the processed data
@@ -181,7 +226,7 @@ The comprehensive model evaluation system produces the following metrics and vis
 
 ### Missing Split Directories
 - **Issue**: Training fails with error about missing `data/split/train` directory
-- **Solution**: Ensure the `split_dataset.py` script has run successfully and that the `data/augmented` directory contains images. The workflow will automatically attempt to recreate split directories if they're missing.
+- **Solution**: The updated workflow now checks multiple directories for data (normalized, augmented, and sorted). It also provides detailed logging about which directory was used and verifies that files were actually copied. Check the console output for specific error messages.
 
 ### GPU Memory Errors
 - **Issue**: CUDA out of memory errors during training
@@ -191,6 +236,10 @@ The comprehensive model evaluation system produces the following metrics and vis
 - **Issue**: Poor performance on minority classes
 - **Solution**: Adjust augmentation parameters to generate more samples for underrepresented classes or implement class weighting in the loss function
 
+### Normalize Step Completing Too Quickly
+- **Issue**: The normalize step completes in 0.00 seconds without processing any files
+- **Solution**: This can happen if the normalize step runs before augmentation. The updated workflow now runs normalize after augmentation to ensure both original and augmented images are processed.
+
 ### Overfitting
 - **Issue**: Large gap between training and validation accuracy
 - **Solution**: Increase dropout rate, add more regularization, or reduce model complexity
@@ -198,6 +247,10 @@ The comprehensive model evaluation system produces the following metrics and vis
 ### Flask Server Issues
 - **Issue**: Flask server fails to start or crashes
 - **Solution**: Check for port conflicts (default is 5000), ensure all dependencies are installed, and check console for specific error messages
+
+### Multiple Dataset Handling
+- **Issue**: Need to process different dataset formats
+- **Solution**: The updated workflow now supports multiple dataset sources. At the start of the workflow, you'll be prompted to select which dataset(s) to use (roboflow, other, or both).
 
 ### Image Validation Errors
 - **Issue**: Uploaded images not displaying or processing correctly

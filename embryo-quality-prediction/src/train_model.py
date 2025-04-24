@@ -215,7 +215,31 @@ def get_model(model_name, num_classes, pretrained=True):
         num_ftrs = model.classifier[2].in_features
         model.classifier[2] = nn.Linear(num_ftrs, num_classes)
     
-    # Add more models as needed
+    elif model_name == "swinv2":
+        try:
+            model = models.swin_v2_b(weights='DEFAULT' if pretrained else None)
+            num_ftrs = model.head.in_features
+            model.head = nn.Linear(num_ftrs, num_classes)
+        except AttributeError:
+            # Fallback for older torchvision versions
+            print("Warning: swinv2_b not available in this torchvision version. Using swin_b instead.")
+            model = models.swin_b(weights='DEFAULT' if pretrained else None)
+            num_ftrs = model.head.in_features
+            model.head = nn.Linear(num_ftrs, num_classes)
+    
+    elif model_name == "efficientvit":
+        try:
+            # Try to import EfficientViT from torchvision
+            model = models.efficientvit_b1(weights='DEFAULT' if pretrained else None)
+            num_ftrs = model.classifier[1].in_features
+            model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+        except (AttributeError, ImportError):
+            # Fallback to EfficientNet if EfficientViT is not available
+            print("Warning: EfficientViT not available in this torchvision version. Using EfficientNet-B0 instead.")
+            model = models.efficientnet_b0(weights='DEFAULT' if pretrained else None)
+            num_ftrs = model.classifier[1].in_features
+            model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+    
     else:
         raise ValueError(f"Unsupported model: {model_name}")
     
@@ -459,6 +483,38 @@ def plot_confusion_matrix(cm, class_names):
     plt.savefig(os.path.join(Config.plots_dir, f"{Config.model_name}_confusion_matrix_{timestamp}.png"))
     plt.close()
 
+# Function to prompt user for model selection
+def select_model():
+    # Check if model name was passed as an environment variable
+    model_name = os.environ.get("EMBRYO_MODEL_SELECTION", "")
+    
+    # If no environment variable is set, prompt the user
+    if not model_name:
+        print("\n🔍 Please select a model architecture:")
+        print("  1. ResNet152 (default)")
+        print("  2. DenseNet201")
+        print("  3. EfficientNet-B7")
+        print("  4. ConvNeXt Base")
+        print("  5. SwinV2")
+        print("  6. EfficientViT")
+        
+        choice = input("\nEnter your choice (1-6) or press Enter for default: ")
+        
+        # Map choice to model name
+        model_mapping = {
+            "1": "resnet152",
+            "2": "densenet201",
+            "3": "efficientnet_b7",
+            "4": "convnext_base",
+            "5": "swinv2",
+            "6": "efficientvit",
+            "": "resnet152"  # Default
+        }
+        
+        model_name = model_mapping.get(choice, "resnet152")
+    
+    return model_name
+
 # Main function
 def main():
     print("\n Setting up directories...")
@@ -470,6 +526,9 @@ def main():
     os.makedirs(Config.plots_dir, exist_ok=True)
     os.makedirs(Config.results_dir, exist_ok=True)
     print(f"Directories created: {Config.output_dir}, {Config.plots_dir}, {Config.results_dir}")
+    
+    # Select model architecture
+    Config.model_name = select_model()
         
     print(f"\nStarting model training for embryo quality prediction")
     print(f"   - Model: {Config.model_name}")
