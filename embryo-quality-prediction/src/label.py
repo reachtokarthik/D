@@ -32,6 +32,7 @@ label_map = {
     "4-2-2": "blastocyst_grade_B",
     "Morula": "morula_grade_A",
     "Early": "8cell_grade_A",
+    "Error image": "error_images",  # Added error images category
     "Arrested": None  # Optionally handle or skip
 }
 

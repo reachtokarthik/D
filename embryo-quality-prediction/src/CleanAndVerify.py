@@ -31,10 +31,16 @@ def compute_image_hash(image_path):
 
 def clean_and_resize_images(base_dir):
     total_removed = 0
+    error_images_count = 0
     for folder in os.listdir(base_dir):
         folder_path = os.path.join(base_dir, folder)
         if not os.path.isdir(folder_path):
             continue
+
+        # Track if we're processing error images
+        is_error_folder = folder == "error_images"
+        if is_error_folder:
+            print(f"🔍 Processing error images folder: {folder}")
 
         for filename in tqdm(os.listdir(folder_path), desc=f"📁 Processing {folder}"):
             file_path = os.path.join(folder_path, filename)
@@ -61,11 +67,17 @@ def clean_and_resize_images(base_dir):
                 img = img.convert("RGB")
                 img = img.resize(TARGET_SIZE, Image.LANCZOS)  # LANCZOS is the recommended replacement for ANTIALIAS
                 img.save(file_path)
+                
+                # Count error images that were successfully processed
+                if is_error_folder:
+                    error_images_count += 1
             except Exception as e:
                 print(f"⚠️ Resize error for {file_path}: {e}")
                 os.remove(file_path)
 
     print(f"\n✅ Cleaning complete. Total removed: {total_removed}")
+    if error_images_count > 0:
+        print(f"🔍 Successfully processed {error_images_count} error images")
 
 # Run it
 clean_and_resize_images(BASE_DIR)

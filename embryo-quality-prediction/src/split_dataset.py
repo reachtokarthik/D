@@ -68,7 +68,12 @@ def collect_dataset_info(source_dir):
             
         class_names.append(class_name)
         
+        # Special logging for error_images class to track its processing
+        if class_name == "error_images":
+            print(f"🔍 Found error_images class directory: {class_dir}")
+        
         # Collect information about each image in the class
+        image_count = 0
         for filename in os.listdir(class_dir):
             if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
                 continue
@@ -79,6 +84,10 @@ def collect_dataset_info(source_dir):
                 'path': image_path,
                 'class': class_name
             })
+            image_count += 1
+            
+        # Log the number of images found in each class
+        print(f"   - {class_name}: {image_count} images found")
     
     # Convert to DataFrame for easier manipulation
     df = pd.DataFrame(dataset_info)
@@ -145,10 +154,22 @@ def copy_images(df, split_name, target_dir):
     """Copy images to the appropriate split directory"""
     print(f"\nud83dudcbe Copying {split_name} images...")
     
+    # Track counts per class for verification
+    class_counts = {}
+    
     for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Copying {split_name} set"):
         source_path = row['path']
         class_name = row['class']
         filename = row['filename']
+        
+        # Track counts
+        if class_name not in class_counts:
+            class_counts[class_name] = 0
+        class_counts[class_name] += 1
+        
+        # Special logging for error_images
+        if class_name == "error_images":
+            print(f"🔍 Copying error image to {split_name} set: {filename}")
         
         target_path = os.path.join(target_dir, class_name, filename)
         
@@ -157,6 +178,17 @@ def copy_images(df, split_name, target_dir):
             shutil.copy2(source_path, target_path)
         except Exception as e:
             print(f"\u26a0\ufe0f Error copying {source_path} to {target_path}: {e}")
+    
+    # Print summary of copied images by class
+    print(f"\n📊 {split_name} set class distribution:")
+    for class_name, count in class_counts.items():
+        print(f"   - {class_name}: {count} images copied")
+        
+    # Special check for error_images
+    if "error_images" in class_counts:
+        print(f"🔍 Successfully copied {class_counts['error_images']} error images to {split_name} set")
+    else:
+        print(f"\u26a0\ufe0f Warning: No error_images were copied to the {split_name} set!")
 
 # Main function to split the dataset
 def split_dataset():
