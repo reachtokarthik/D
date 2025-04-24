@@ -10,11 +10,9 @@ SCRIPT_DIR = path.dirname(path.abspath(__file__))
 PROJECT_ROOT = path.dirname(SCRIPT_DIR)
 
 # Source directories - both original and augmented images
-# For initial testing, let's focus only on the sorted directory to avoid processing too many images at once
 SOURCE_DIRS = [
-    path.join(PROJECT_ROOT, "data", "sorted")
-    # Uncomment the line below to also process augmented images
-    # path.join(PROJECT_ROOT, "data", "augmented")
+    path.join(PROJECT_ROOT, "data", "sorted"),
+    path.join(PROJECT_ROOT, "data", "augmented")
 ]
 
 # Output directory for normalized images
@@ -140,9 +138,17 @@ def normalize_dataset():
         mean, std = None, None
     
     # Process each source directory
+    processed_files = 0
+    skipped_files = 0
+    
     for source_dir in SOURCE_DIRS:
         if not os.path.exists(source_dir):
             print(f"⚠️ Source directory {source_dir} not found")
+            continue
+        
+        # Check if directory is empty
+        if len(os.listdir(source_dir)) == 0:
+            print(f"⚠️ Source directory {source_dir} is empty")
             continue
             
         print(f"\n🔄 Processing images from {source_dir}")
@@ -167,6 +173,7 @@ def normalize_dataset():
                 
                 # Skip if already processed
                 if os.path.exists(dest_path):
+                    skipped_files += 1
                     continue
                     
                 try:
@@ -188,7 +195,8 @@ def normalize_dataset():
                     normalized_img = cv2.cvtColor(normalized_img, cv2.COLOR_RGB2BGR)
                     
                     # Save the normalized image
-                    save_normalized_image(normalized_img, dest_path)
+                    if save_normalized_image(normalized_img, dest_path):
+                        processed_files += 1
                     
                 except Exception as e:
                     print(f"⚠️ Error normalizing {src_path}: {e}")
@@ -203,6 +211,8 @@ def normalize_dataset():
             print(f"   - {folder}: {count} images")
     
     print(f"\n✅ Normalization complete: {total_normalized} images normalized using {NORM_TYPE} normalization")
+    print(f"   - Files processed: {processed_files}")
+    print(f"   - Files skipped (already normalized): {skipped_files}")
     
     if NORM_TYPE == "imagenet":
         print("\n💡 Note: Images are normalized using ImageNet statistics:")
@@ -214,8 +224,8 @@ def normalize_dataset():
         print(f"   - Mean: {mean}")
         print(f"   - Std: {std}")
 
-# Run the normalization process
-if __name__ == "__main__":
+def main():
+    """Main function to be called from the workflow"""
     print("🔍 Starting image normalization process")
     print(f"   - Normalization type: {NORM_TYPE}")
     print(f"   - Target size: {TARGET_SIZE}")
@@ -225,3 +235,7 @@ if __name__ == "__main__":
     
     # Normalize the dataset
     normalize_dataset()
+
+# Run the normalization process
+if __name__ == "__main__":
+    main()

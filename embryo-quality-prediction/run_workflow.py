@@ -69,6 +69,8 @@ def main():
     
     # Create necessary directories
     os.makedirs(path.join(PROJECT_ROOT, "data", "raw"), exist_ok=True)
+    os.makedirs(path.join(PROJECT_ROOT, "data", "raw", "roboflow"), exist_ok=True)
+    os.makedirs(path.join(PROJECT_ROOT, "data", "raw", "other"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "data", "sorted"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "data", "augmented"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "data", "normalized"), exist_ok=True)
@@ -76,6 +78,56 @@ def main():
     os.makedirs(path.join(PROJECT_ROOT, "models"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "outputs", "plots"), exist_ok=True)
     os.makedirs(path.join(PROJECT_ROOT, "outputs", "results"), exist_ok=True)
+    
+    # Check if data directories exist and provide dataset selection options
+    roboflow_dir = path.join(PROJECT_ROOT, "data", "raw", "roboflow")
+    other_dir = path.join(PROJECT_ROOT, "data", "raw", "other")
+    
+    roboflow_has_data = os.path.exists(roboflow_dir) and len(os.listdir(roboflow_dir)) > 0
+    other_has_data = os.path.exists(other_dir) and len(os.listdir(other_dir)) > 0
+    
+    # Set environment variable for dataset selection
+    os.environ["EMBRYO_DATASET_SELECTION"] = ""
+    
+    if not roboflow_has_data and not other_has_data:
+        print("\n⚠️ Warning: No data found in either raw/roboflow or raw/other directories.")
+        print("Please ensure you have placed your data in at least one of these directories before proceeding.")
+        user_input = input("Do you want to continue anyway? (y/n): ")
+        if user_input.lower() != 'y':
+            print("Workflow stopped due to missing data")
+            return
+    else:
+        print("\n" + "=" * 50)
+        print("DATASET SELECTION")
+        print("=" * 50)
+        
+        available_options = []
+        if roboflow_has_data:
+            available_options.append("roboflow")
+            print("1. Roboflow dataset (original dataset)")
+        
+        if other_has_data:
+            available_options.append("other")
+            print(f"{2 if roboflow_has_data else 1}. Other dataset (new dataset)")
+        
+        if roboflow_has_data and other_has_data:
+            available_options.append("both")
+            print("3. Both datasets")
+        
+        while True:
+            try:
+                selection = input("\nSelect which dataset to use (enter the number): ")
+                selection_idx = int(selection) - 1
+                
+                if 0 <= selection_idx < len(available_options):
+                    dataset_choice = available_options[selection_idx]
+                    print(f"Selected: {dataset_choice.capitalize()} dataset")
+                    os.environ["EMBRYO_DATASET_SELECTION"] = dataset_choice
+                    break
+                else:
+                    print("Invalid selection. Please try again.")
+            except ValueError:
+                print("Please enter a valid number.")
     
     # Phase 1: Data Preparation
     print_section_header("PHASE 1: DATA PREPARATION")
@@ -95,14 +147,14 @@ def main():
         print("Workflow stopped due to error in CleanAndVerify.py")
         return
     
-    # Step 4: Normalize images
-    if not run_module("normalize"):
-        print("Workflow stopped due to error in normalize.py")
-        return
-    
-    # Step 5: Augment images
+    # Step 4: Augment images
     if not run_module("imgaug"):
         print("Workflow stopped due to error in imgaug.py")
+        return
+    
+    # Step 5: Normalize images (now after augmentation)
+    if not run_module("normalize"):
+        print("Workflow stopped due to error in normalize.py")
         return
     
     # Step 6: Split dataset
