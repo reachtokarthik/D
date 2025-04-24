@@ -59,7 +59,8 @@ if IN_COLAB:
         
         # Install required packages if in Colab
         print("\nInstalling required packages...")
-        !pip install -q torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "torch", "torchvision", "tqdm", "opencv-python", "Pillow", "scikit-learn", "matplotlib", "seaborn", "lion-pytorch"])
         print("Package installation complete.")
         
     except ImportError:
@@ -105,7 +106,8 @@ def run_module(module_name, module_path=None):
             print(f"\n⚠️ Import error in {module_name}: {str(ie)}")
             print("This may be due to missing packages in Colab environment.")
             print("Installing required packages...")
-            !pip install -q torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch
+            import subprocess
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "torch", "torchvision", "tqdm", "opencv-python", "Pillow", "scikit-learn", "matplotlib", "seaborn", "lion-pytorch"])
             print("Retrying import...")
             try:
                 if module_path:
@@ -508,7 +510,7 @@ if __name__ == "__main__":
         print(f"\nUnexpected error: {str(e)}")
         traceback.print_exc()
         print("\nIf you're running in Google Colab and encountering package-related errors,")
-        print("try running the following commands in a separate cell:")
-        print("!pip install --force-reinstall blinker")
-        print("!pip install --ignore-installed torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch")
-        print("Then restart the runtime (Runtime > Restart runtime) and run the workflow again.")
+        print("try running the following commands:")
+        print("python -m pip install --force-reinstall blinker")
+        print("python -m pip install --ignore-installed torch torchvision tqdm opencv-python Pillow scikit-learn matplotlib seaborn lion-pytorch")
+        print("Then restart your Python environment and run the workflow again.")
