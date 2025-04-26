@@ -81,8 +81,6 @@ else:
 # Calculate exact augmentation needed for each class
 augmentation_plans = {}
 for folder, count in original_class_counts.items():
-    if folder == "error_images":  # Skip error_images folder
-        continue
     
     # Calculate how many total images we need
     if count == 0:
@@ -129,8 +127,6 @@ for folder, count in original_class_counts.items():
 
 # Ensure target folders exist
 for folder in os.listdir(SOURCE_DIR):
-    if folder == "error_images":  # Skip error_images folder
-        continue
         
     src_folder = os.path.join(SOURCE_DIR, folder)
     if not os.path.isdir(src_folder):
@@ -187,8 +183,6 @@ if os.path.exists(AUGMENTED_DIR):
     # Copy original images to augmented directory to reach final dataset
     print("\n🔄 Copying original images to augmented directory...")
     for folder in original_class_counts.keys():
-        if folder == "error_images":  # Skip error_images folder
-            continue
             
         src_folder = os.path.join(SOURCE_DIR, folder)
         if not os.path.isdir(src_folder):
@@ -220,8 +214,6 @@ if os.path.exists(AUGMENTED_DIR):
     
     # Check if any class needs additional augmentations or trimming
     for class_name, count in final_class_counts.items():
-        if class_name == "error_images":
-            continue
             
         original = original_class_counts.get(class_name, 0)
         
@@ -290,8 +282,6 @@ if os.path.exists(AUGMENTED_DIR):
     print("   - Class distribution:")
     
     for class_name, count in final_class_counts.items():
-        if class_name == "error_images":
-            continue
         original = original_class_counts.get(class_name, 0)
         status = "✅" if MIN_IMAGES_PER_CLASS <= count <= MAX_IMAGES_PER_CLASS else "❌"
         print(f"      {status} {class_name}: {count} images (Original: {original}, Target: {MIN_IMAGES_PER_CLASS}-{MAX_IMAGES_PER_CLASS})")
@@ -299,7 +289,7 @@ if os.path.exists(AUGMENTED_DIR):
     # Check if any class needs additional augmentation to reach minimum
     classes_needing_more = {cls: (MIN_IMAGES_PER_CLASS - count) 
                            for cls, count in final_class_counts.items() 
-                           if cls != "error_images" and count < MIN_IMAGES_PER_CLASS}
+                           if count < MIN_IMAGES_PER_CLASS}
     
     if classes_needing_more:
         print("\n⚠️ Some classes still need more augmentation to reach the minimum target:")
@@ -310,7 +300,7 @@ if os.path.exists(AUGMENTED_DIR):
     # Check if any class exceeds maximum
     classes_exceeding_max = {cls: (count - MAX_IMAGES_PER_CLASS) 
                             for cls, count in final_class_counts.items() 
-                            if cls != "error_images" and count > MAX_IMAGES_PER_CLASS}
+                            if count > MAX_IMAGES_PER_CLASS}
     
     if classes_exceeding_max:
         print("\n⚠️ Some classes exceed the maximum target:")
