@@ -20,6 +20,7 @@ from torchvision import transforms, models
 from torchvision.datasets import ImageFolder
 import base64
 from io import BytesIO
+from PIL import Image
 
 # Get the absolute path to the project root directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +29,9 @@ sys.path.append(PROJECT_ROOT)
 
 # Import the Config class from train_model
 from src.train_model import Config, get_transforms
+
+# Import XAI utilities
+from src.xai_utils import generate_xai_visualization, generate_batch_xai_visualization, create_combined_visualization
 
 class ModelEvaluator:
     def __init__(self, model_path, test_data_dir=None):
@@ -179,6 +183,8 @@ class ModelEvaluator:
         all_preds = []
         all_labels = []
         all_probs = []
+        all_images = []
+        all_image_paths = []
         
         with torch.no_grad():
             for inputs, labels in tqdm(self.test_loader, desc="Evaluating"):
@@ -199,6 +205,9 @@ class ModelEvaluator:
                     
                     # Calculate probabilities with error checking
                     probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                    
+                    # Store original images for XAI visualization
+                    all_images.append(inputs.cpu())
                     if probabilities is None or len(probabilities) == 0:
                         print(f"Warning: Failed to compute probabilities for batch")
                         continue
@@ -287,6 +296,9 @@ class ModelEvaluator:
         
         # Generate per-class metrics plot
         self._generate_per_class_metrics_plot(per_class_metrics)
+        
+        # Generate XAI visualizations
+        self.generate_xai_visualizations()
         
         print("Evaluation completed successfully!")
         return self.results
@@ -433,6 +445,55 @@ class ModelEvaluator:
         # Save to file
         plt.savefig(os.path.join(Config.plots_dir, 'per_class_metrics.png'))
         plt.close()
+        
+    def generate_xai_visualizations(self, num_samples=6):
+        """Generate XAI visualizations for a subset of test images."""
+        print(f"Generating XAI visualizations for {num_samples} test images...")
+        
+        # Create directory for XAI visualizations
+        xai_dir = os.path.join(Config.results_dir, "xai_visualizations")
+        os.makedirs(xai_dir, exist_ok=True)
+        
+        # Get a subset of test images
+        dataset = self.test_loader.dataset
+        indices = np.random.choice(len(dataset), min(num_samples, len(dataset)), replace=False)
+        
+        # Get image paths and labels
+        image_paths = [dataset.samples[i][0] for i in indices]
+        labels = [dataset.samples[i][1] for i in indices]
+        
+        # Get transforms for prediction
+        _, transform = get_transforms()
+        
+        # Generate XAI visualizations
+        xai_results = generate_batch_xai_visualization(
+            model=self.model,
+            image_paths=image_paths,
+            transform=transform,
+            class_names=self.class_names,
+            device=self.device,
+            output_dir=xai_dir
+        )
+        
+        # Create combined visualization
+        combined_path = os.path.join(xai_dir, "combined_visualization.png")
+        create_combined_visualization(xai_results, output_path=combined_path)
+        
+        # Save combined visualization as base64 for HTML embedding
+        with open(combined_path, 'rb') as f:
+            img_data = f.read()
+            img_str = base64.b64encode(img_data).decode('utf-8')
+            self.figures['xai_visualization'] = img_str
+        
+        # Save XAI results
+        self.results['xai_visualizations'] = {
+            'combined_path': combined_path,
+            'image_paths': image_paths,
+            'labels': labels
+        }
+        
+        print(f"XAI visualizations saved to {xai_dir}")
+        return xai_dir
 
     def save_results(self):
         """Save evaluation results to files."""
@@ -625,6 +686,22 @@ class ModelEvaluator:
                             <div class="card-body text-center">
                                 <img src="data:image/png;base64,{self.figures['roc_curves']}" 
                                      class="img-fluid" alt="ROC Curves">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <!-- XAI Visualizations -->
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">Explainable AI (XAI) Visualizations</div>
+                            <div class="card-body">
+                                <p class="mb-3">The visualizations below show both the original embryo images and their corresponding XAI heatmaps, which highlight the regions that influenced the model's predictions. Warmer colors (red/yellow) indicate areas that strongly influenced the classification decision.</p>
+                                <div class="text-center">
+                                    <img src="data:image/png;base64,{self.figures.get('xai_visualization', '')}" 
+                                         class="img-fluid" alt="XAI Visualizations">
+                                </div>
                             </div>
                         </div>
                     </div>

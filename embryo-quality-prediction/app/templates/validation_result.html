@@ -92,7 +92,7 @@
         <!-- Results -->
         <div class="row mb-4">
             <!-- Image Display -->
-            <div class="col-md-6">
+            <div class="col-md-{% if xai_data is defined %}4{% else %}6{% endif %}">
                 <div class="card h-100">
                     <div class="card-header">
                         <i class="bi bi-image"></i> Embryo Image
@@ -104,8 +104,23 @@
                 </div>
             </div>
             
+            {% if xai_data is defined %}
+            <!-- XAI Visualization -->
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-eye"></i> XAI Visualization
+                    </div>
+                    <div class="card-body text-center">
+                        <img src="data:image/png;base64,{{ xai_data }}" alt="XAI Visualization" class="embryo-image">
+                        <p class="mt-3">Regions influencing prediction</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
             <!-- Prediction Results -->
-            <div class="col-md-6">
+            <div class="col-md-{% if xai_data is defined %}4{% else %}6{% endif %}">
                 <div class="card h-100">
                     <div class="card-header">
                         <i class="bi bi-check-circle"></i> Prediction Results
@@ -186,6 +201,14 @@
                         <i class="bi bi-info-circle"></i> Interpretation
                     </div>
                     <div class="card-body">
+                        {% if xai_data is defined %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-lightbulb-fill"></i> <strong>XAI Visualization:</strong> 
+                            The heatmap visualization shows which regions of the embryo influenced the model's prediction. 
+                            Warmer colors (red/yellow) indicate areas that strongly influenced the classification decision, 
+                            while cooler colors (blue) had less influence.
+                        </div>
+                        {% endif %}
                         <h5>What This Means</h5>
                         
                         {% if result.confidence >= 0.9 %}

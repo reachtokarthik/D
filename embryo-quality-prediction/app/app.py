@@ -17,6 +17,8 @@ sys.path.append(PROJECT_ROOT)
 # Import evaluation and prediction modules
 from src.evaluate_model import ModelEvaluator, find_latest_model
 from src.predict_image import EmbryoPredictor
+from src.xai_utils import generate_xai_visualization
+from src.train_model import get_transforms
 
 app = Flask(__name__)
 app.secret_key = 'embryo_quality_prediction_app'
@@ -308,6 +310,20 @@ def validate_image():
                     traceback.print_exc()
                     return redirect(request.url)
                 
+                # Generate XAI visualization
+                try:
+                    _, transform = get_transforms()
+                    xai_result = generate_xai_visualization(
+                        model=predictor.model,
+                        image_path=file_path,
+                        transform=transform,
+                        class_names=predictor.class_names,
+                        device=predictor.device
+                    )
+                except Exception as e:
+                    flash(f"Warning: Could not generate XAI visualization: {e}", "warning")
+                    xai_result = None
+                
                 # Save prediction
                 try:
                     predictor.save_prediction(result)
@@ -323,11 +339,18 @@ def validate_image():
                     flash(f"Error encoding image: {e}", "danger")
                     return redirect(request.url)
                 
-                # Render result template
-                return render_template('validation_result.html', 
-                                      result=result,
-                                      image_data=encoded_image,
-                                      image_name=file.filename)
+                # Render result template with XAI visualization if available
+                if xai_result:
+                    return render_template('validation_result.html', 
+                                        result=result,
+                                        image_data=encoded_image,
+                                        xai_data=xai_result['xai_image'],
+                                        image_name=file.filename)
+                else:
+                    return render_template('validation_result.html', 
+                                        result=result,
+                                        image_data=encoded_image,
+                                        image_name=file.filename)
             
             except Exception as e:
                 flash(f"Error in validation process: {e}", "danger")

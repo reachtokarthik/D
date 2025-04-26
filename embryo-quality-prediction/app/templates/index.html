@@ -225,7 +225,7 @@
                                         <td>{{ report.name }}</td>
                                         <td>{{ report.modified }}</td>
                                         <td>
-                                            <a href="{{ url_for('view_report', report_path=report.name) }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                            <a href="{{ url_for('view_report', report_path=report.name) }}" class="btn btn-sm btn-outline-primary view-report-btn" target="_blank" onclick="hideLoading(event)">
                                                 <i class="bi bi-eye"></i> View
                                             </a>
                                         </td>
@@ -403,5 +403,29 @@
             .catch(error => console.error('Error fetching metrics:', error));
     </script>
     {% endif %}
+    
+    <!-- Script to handle report viewing -->
+    <script>
+        // Function to hide loading spinner when viewing a report in a new tab
+        function hideLoading(event) {
+            // Small delay to ensure the new tab opens first
+            setTimeout(function() {
+                // Hide any loading spinners or overlays
+                const spinners = document.querySelectorAll('.spinner-overlay, .loading-indicator');
+                spinners.forEach(spinner => {
+                    spinner.style.display = 'none';
+                });
+                
+                // Reset any loading states on buttons
+                const buttons = document.querySelectorAll('.btn');
+                buttons.forEach(button => {
+                    button.disabled = false;
+                    if (button.querySelector('.spinner-border')) {
+                        button.querySelector('.spinner-border').remove();
+                    }
+                });
+            }, 500);
+        }
+    </script>
 </body>
 </html>
