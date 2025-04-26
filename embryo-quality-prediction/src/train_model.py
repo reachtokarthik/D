@@ -741,7 +741,7 @@ def evaluate_model(model, test_loader, model_name=None):
     
     # Finalize the HTML report
     print("\n📊 Finalizing HTML report...")
-    report_path = os.path.join(PROJECT_ROOT, "model_report.html")
+    report_path = report_generator.report_path
     print(f"\n✅ HTML report finalized and available at: {report_path}")
     
     # Open the report in browser if not in Colab
@@ -749,7 +749,7 @@ def evaluate_model(model, test_loader, model_name=None):
         try:
             import webbrowser
             print("Opening report in browser...")
-            webbrowser.open(f"file://{report_path}")
+            webbrowser.open(f"file://{os.path.abspath(report_path)}")
         except Exception as e:
             print(f"Could not open report in browser: {e}")
     else:
