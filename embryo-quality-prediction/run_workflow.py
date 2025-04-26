@@ -506,8 +506,27 @@ def main():
         print(f"✅ Final report generated successfully")
         print(f"📊 Report saved to: {report_path}")
         
-        # Open the report in browser
-        if not IN_COLAB:
+        # Open the report in browser or display in Colab
+        if IN_COLAB:
+            try:
+                from google.colab import files
+                from IPython.display import HTML, display
+                print("\nTo view the report in Colab, you can:")
+                print("1. Download the HTML file using the link below")
+                print("2. Or view it directly in the output cell")
+                
+                # Provide download link
+                files.download(report_path)
+                
+                # Also try to display the HTML directly
+                with open(report_path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+                display(HTML(html_content))
+                print("\nReport displayed above and available for download")
+            except Exception as colab_err:
+                print(f"Note: Could not display report in Colab: {str(colab_err)}")
+                print(f"The report is still saved at: {report_path}")
+        else:
             import webbrowser
             print("Opening report in browser...")
             webbrowser.open(f"file://{report_path}")

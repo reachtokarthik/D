@@ -699,10 +699,18 @@ def main():
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=Config.scheduler_patience, verbose=True)
     
     # Train the model
-    model = train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, Config.num_epochs)
+    model, train_losses, val_losses, train_accs, val_accs = train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, Config.num_epochs)
+    
+    # Plot training results
+    plot_training_results(train_losses, val_losses, train_accs, val_accs)
     
     # Evaluate the model on test set
-    accuracy, precision, recall, f1, _ = evaluate_model(model, test_loader)
+    accuracy, cm, report = evaluate_model(model, test_loader)
+    
+    # Extract metrics from the report
+    precision = report['weighted avg']['precision']
+    recall = report['weighted avg']['recall']
+    f1 = report['weighted avg']['f1-score']
     
     # Save the final model
     torch.save({

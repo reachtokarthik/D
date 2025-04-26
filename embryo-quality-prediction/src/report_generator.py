@@ -8,7 +8,6 @@ import pandas as pd
 from io import BytesIO
 import seaborn as sns
 from PIL import Image
-import tensorflow as tf
 
 class ReportGenerator:
     """
@@ -22,6 +21,11 @@ class ReportGenerator:
         self.report_path = os.path.join(project_root, "model_report.html")
         self.plots_dir = os.path.join(project_root, "outputs", "plots")
         os.makedirs(self.plots_dir, exist_ok=True)
+        
+        # Check if running in Colab
+        self.in_colab = 'google.colab' in str(globals())
+        if self.in_colab:
+            print("ReportGenerator: Running in Google Colab environment")
         
         # Initialize report data structure
         self.report_data = {
@@ -812,12 +816,31 @@ class ReportGenerator:
             src_start = html.find('src="', img_pos) + 5
             src_end = html.find('"', src_start)
             
-            # Get relative path for HTML
-            rel_path = os.path.relpath(image_path, os.path.dirname(self.report_path))
-            rel_path = rel_path.replace('\\', '/')
+            # In Colab, use data URLs instead of file paths
+            if self.in_colab and os.path.exists(image_path):
+                try:
+                    with open(image_path, 'rb') as img_file:
+                        img_data = base64.b64encode(img_file.read()).decode('utf-8')
+                    img_type = image_path.split('.')[-1].lower()
+                    if img_type == 'jpg':
+                        img_type = 'jpeg'
+                    data_url = f'data:image/{img_type};base64,{img_data}'
+                    new_src = data_url
+                    print(f"Embedded image {image_id} as data URL for Colab compatibility")
+                except Exception as img_err:
+                    print(f"Could not embed image as data URL: {img_err}")
+                    # Fallback to relative path
+                    rel_path = os.path.relpath(image_path, os.path.dirname(self.report_path))
+                    rel_path = rel_path.replace('\\', '/')
+                    new_src = rel_path
+            else:
+                # Get relative path for HTML in non-Colab environments
+                rel_path = os.path.relpath(image_path, os.path.dirname(self.report_path))
+                rel_path = rel_path.replace('\\', '/')
+                new_src = rel_path
             
             # Replace the src
-            new_html = html[:src_start] + rel_path + html[src_end:]
+            new_html = html[:src_start] + new_src + html[src_end:]
             
             with open(self.report_path, 'w', encoding='utf-8') as f:
                 f.write(new_html)
