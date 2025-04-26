@@ -278,8 +278,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     # Use model name from Config if not provided
     if model_name is None:
         model_name = Config.model_name
-    # Initialize report generator
-    report_generator = ReportGenerator(PROJECT_ROOT)
+    # Initialize report generator with model name
+    report_generator = ReportGenerator(PROJECT_ROOT, model_name=model_name)
     
     # Check if running in Colab
     in_colab = 'google.colab' in str(globals())
@@ -635,9 +635,12 @@ def plot_training_results(train_losses, val_losses, train_accs, val_accs):
     plt.close()
 
 # Evaluate model on test set
-def evaluate_model(model, test_loader):
-    # Initialize report generator
-    report_generator = ReportGenerator(PROJECT_ROOT)
+def evaluate_model(model, test_loader, model_name=None):
+    # Use model name from Config if not provided
+    if model_name is None:
+        model_name = Config.model_name
+    # Initialize report generator with model name
+    report_generator = ReportGenerator(PROJECT_ROOT, model_name=model_name)
     
     device = Config.device
     model = model.to(device)
@@ -872,7 +875,7 @@ def main():
     plot_training_results(train_losses, val_losses, train_accs, val_accs)
     
     # Evaluate the model on test set
-    accuracy, cm, report = evaluate_model(model, test_loader)
+    accuracy, cm, report = evaluate_model(model, test_loader, model_name=Config.model_name)
     
     # Extract metrics from the report
     precision = report['weighted avg']['precision']
