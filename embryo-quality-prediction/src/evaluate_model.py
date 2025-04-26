@@ -3,6 +3,8 @@ import sys
 import json
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
@@ -180,16 +182,50 @@ class ModelEvaluator:
         
         with torch.no_grad():
             for inputs, labels in tqdm(self.test_loader, desc="Evaluating"):
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-                
-                outputs = self.model(inputs)
-                probabilities = torch.nn.functional.softmax(outputs, dim=1)
-                _, preds = torch.max(outputs, 1)
-                
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                all_probs.extend(probabilities.cpu().numpy())
+                try:
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
+                    
+                    # Forward pass with error checking
+                    outputs = self.model(inputs)
+                    if outputs is None:
+                        print(f"Warning: Model returned None output for batch")
+                        continue
+                        
+                    # Check output shape
+                    if len(outputs.shape) != 2:
+                        print(f"Warning: Unexpected output shape: {outputs.shape}. Expected shape: [batch_size, num_classes]")
+                        continue
+                    
+                    # Calculate probabilities with error checking
+                    probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                    if probabilities is None or len(probabilities) == 0:
+                        print(f"Warning: Failed to compute probabilities for batch")
+                        continue
+                    
+                    # Get predictions with error handling
+                    max_result = torch.max(outputs, 1)
+                    if max_result is None:
+                        print(f"Warning: torch.max returned None for batch")
+                        continue
+                        
+                    # Safely unpack the result
+                    try:
+                        values, preds = max_result
+                    except (ValueError, TypeError) as e:
+                        print(f"Warning: Failed to unpack torch.max result: {e}. Result was: {max_result}")
+                        continue
+                    
+                    # Store results
+                    all_preds.extend(preds.cpu().numpy())
+                    all_labels.extend(labels.cpu().numpy())
+                    all_probs.extend(probabilities.cpu().numpy())
+                    
+                except Exception as e:
+                    print(f"Error processing batch: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
         
         # Convert to numpy arrays
         all_preds = np.array(all_preds)
@@ -262,8 +298,17 @@ class ModelEvaluator:
         # Store AUC values
         auc_values = []
         
+        # Check if the number of classes in probabilities matches expected classes
+        num_prob_classes = all_probs.shape[1]
+        if num_prob_classes < len(self.class_names):
+            print(f"Warning: Model output has {num_prob_classes} classes but {len(self.class_names)} class names provided.")
+            print(f"Only generating ROC curves for the first {num_prob_classes} classes.")
+            class_names_to_use = self.class_names[:num_prob_classes]
+        else:
+            class_names_to_use = self.class_names
+        
         # Generate ROC curve for each class
-        for i, class_name in enumerate(self.class_names):
+        for i, class_name in enumerate(class_names_to_use):
             # Convert to one-vs-rest
             y_true = (all_labels == i).astype(int)
             y_score = all_probs[:, i]
@@ -307,14 +352,23 @@ class ModelEvaluator:
         """Generate confusion matrix plot."""
         plt.figure(figsize=(10, 8))
         
+        # Check if confusion matrix dimensions match the number of class names
+        n_classes = cm.shape[0]
+        if n_classes != len(self.class_names):
+            print(f"Warning: Confusion matrix has {n_classes} classes but {len(self.class_names)} class names provided.")
+            print(f"Using only the first {n_classes} class names for the confusion matrix plot.")
+            class_names_to_use = self.class_names[:n_classes]
+        else:
+            class_names_to_use = self.class_names
+        
         # Normalize confusion matrix
         cm_norm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         
         # Create heatmap
         sns.heatmap(
             cm_norm, annot=cm, fmt='d', cmap='Blues',
-            xticklabels=self.class_names,
-            yticklabels=self.class_names
+            xticklabels=class_names_to_use,
+            yticklabels=class_names_to_use
         )
         
         # Set plot properties

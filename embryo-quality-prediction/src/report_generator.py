@@ -2,6 +2,8 @@ import os
 import json
 import base64
 from datetime import datetime
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -787,49 +789,7 @@ class ReportGenerator:
             encodings = ['utf-8', 'latin-1', 'cp1252']
             html = None
             
-    except Exception as e:
-        print(f"Error updating HTML element: {e}")
-
-def _update_html_image(self, image_id, image_path):
-    """Update an image in the HTML report."""
-    try:
-        # Read the current HTML content
-        with open(self.report_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Find the image by ID
-        img_tag = f'<img id="{image_id}"'
-        
-        img_pos = html_content.find(img_tag)
-        if img_pos == -1:
-            print(f"Image with ID '{image_id}' not found in HTML")
-            return
-        
-        # Find src attribute
-        src_start = html_content.find('src="', img_pos) + 5
-        src_end = html_content.find('"', src_start)
-        
-        # In Colab, use data URLs instead of file paths
-        if self.in_colab and os.path.exists(image_path):
-            try:
-                with open(image_path, 'rb') as img_file:
-                    img_data = base64.b64encode(img_file.read()).decode('utf-8')
-                img_type = image_path.split('.')[-1].lower()
-                if img_type == 'jpg':
-                    img_type = 'jpeg'
-                data_url = f'data:image/{img_type};base64,{img_data}'
-                new_src = data_url
-                print(f"Embedded image {image_id} as data URL for Colab compatibility")
-            except Exception as img_err:
-                print(f"Could not embed image as data URL: {img_err}")
-                # Fallback to relative path
-    def _update_html_image(self, image_id, image_path):
-        """Update an image in the HTML report."""
-        try:
-            # Try different encodings to handle potential encoding issues
-            encodings = ['utf-8', 'latin-1', 'cp1252']
-            html = None
-            
+            # Read the current HTML content
             for encoding in encodings:
                 try:
                     with open(self.report_path, 'r', encoding=encoding) as f:
@@ -839,20 +799,45 @@ def _update_html_image(self, image_id, image_path):
                     continue
             
             if html is None:
-                print(f"Could not read HTML file with any of the attempted encodings")
-                return
+                raise ValueError(f"Could not read HTML file with any of the encodings: {encodings}")
             
+            # Update the element by ID
+            if isinstance(content, str):
+                # For text content
+                updated_html = html.replace(f'id="{element_id}">', f'id="{element_id}">{content}')
+            else:
+                # For other content types (like JSON)
+                content_str = json.dumps(content)
+                updated_html = html.replace(f'id="{element_id}">', f'id="{element_id}">{content_str}')
+            
+            # Write the updated HTML back to the file
+            with open(self.report_path, 'w', encoding='utf-8') as f:
+                f.write(updated_html)
+                
+        except Exception as e:
+            print(f"Error updating HTML element: {e}")
+
+    def _update_html_image(self, image_id, image_path):
+        """Update an image in the HTML report."""
+        try:
+            # Read the current HTML content
+            with open(self.report_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+                
             # Find the image by ID
             img_tag = f'<img id="{image_id}"'
             
-            img_pos = html.find(img_tag)
+            img_pos = html_content.find(img_tag)
             if img_pos == -1:
                 print(f"Image with ID '{image_id}' not found in HTML")
                 return
             
             # Find src attribute
-            src_start = html.find('src="', img_pos) + 5
-            src_end = html.find('"', src_start)
+            src_start = html_content.find('src="', img_pos) + 5
+            src_end = html_content.find('"', src_start)
+            
+            # Determine the new src value
+            new_src = image_path
             
             # In Colab, use data URLs instead of file paths
             if self.in_colab and os.path.exists(image_path):
@@ -877,12 +862,15 @@ def _update_html_image(self, image_id, image_path):
                 rel_path = rel_path.replace('\\', '/')
                 new_src = rel_path
             
-            # Replace the src
-            new_html = html[:src_start] + new_src + html[src_end:]
+            # Replace the src attribute
+            updated_html = html_content[:src_start] + new_src + html_content[src_end:]
             
+            # Write the updated HTML back to the file
             with open(self.report_path, 'w', encoding='utf-8') as f:
-                f.write(new_html)
+                f.write(updated_html)
                 
+            print(f"Updated image {image_id} with {new_src}")
+            
         except Exception as e:
             print(f"Error updating HTML image: {e}")
     

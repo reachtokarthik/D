@@ -3,6 +3,8 @@ from os import path
 import time
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
@@ -295,6 +297,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         print("\n📊 Running in Google Colab - will display training progress in notebook")
         try:
             from IPython.display import clear_output
+            import matplotlib
+            matplotlib.use('Agg')
             import matplotlib.pyplot as plt
             from matplotlib.gridspec import GridSpec
             

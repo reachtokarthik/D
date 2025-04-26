@@ -119,26 +119,42 @@ def evaluate_model():
         flash(f"Model evaluated successfully. Report generated at {os.path.basename(report_path)}", "success")
         
         # Redirect to the report
-        return redirect(url_for('view_report', report_name=os.path.basename(report_path)))
+        return redirect(url_for('view_report', report_path=os.path.basename(report_path)))
     
     except Exception as e:
         flash(f"Error evaluating model: {e}", "danger")
         return redirect(url_for('index'))
 
 
-@app.route('/report/<report_name>')
-def view_report(report_name):
+@app.route('/report/<path:report_path>')
+def view_report(report_path):
     """View a specific evaluation report."""
-    report_path = os.path.join(AppConfig.RESULTS_DIR, report_name)
+    # Check if the path is a directory or file
+    full_path = os.path.join(AppConfig.RESULTS_DIR, report_path)
     
-    if not os.path.exists(report_path):
-        flash(f"Report {report_name} not found", "danger")
+    # If it's a directory, look for the report file
+    if os.path.isdir(full_path):
+        # Find HTML files in the directory
+        html_files = glob.glob(os.path.join(full_path, "*.html"))
+        if html_files:
+            full_path = html_files[0]  # Use the first HTML file found
+        else:
+            flash(f"No report found in {report_path}", "danger")
+            return redirect(url_for('index'))
+    
+    # If it's not a directory and doesn't exist, report error
+    if not os.path.exists(full_path):
+        flash(f"Report {report_path} not found", "danger")
         return redirect(url_for('index'))
     
-    with open(report_path, 'r') as f:
-        report_content = f.read()
-    
-    return report_content
+    # Read and return the report content with proper content type
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            report_content = f.read()
+        return report_content, {"Content-Type": "text/html"}
+    except Exception as e:
+        flash(f"Error reading report: {e}", "danger")
+        return redirect(url_for('index'))
 
 
 @app.route('/compare', methods=['GET', 'POST'])
@@ -273,17 +289,39 @@ def validate_image():
             
             try:
                 # Initialize predictor with selected model
-                predictor = EmbryoPredictor(model_path)
+                try:
+                    predictor = EmbryoPredictor(model_path)
+                except Exception as e:
+                    flash(f"Error initializing predictor: {e}", "danger")
+                    import traceback
+                    traceback.print_exc()
+                    return redirect(request.url)
                 
-                # Make prediction
-                result = predictor.predict(file_path)
+                # Make prediction with detailed error handling
+                try:
+                    result = predictor.predict(file_path)
+                    if result is None:
+                        raise ValueError("Prediction returned None result")
+                except Exception as e:
+                    flash(f"Error during prediction: {e}", "danger")
+                    import traceback
+                    traceback.print_exc()
+                    return redirect(request.url)
                 
                 # Save prediction
-                predictor.save_prediction(result)
+                try:
+                    predictor.save_prediction(result)
+                except Exception as e:
+                    # Non-critical error, just log it
+                    print(f"Warning: Could not save prediction: {e}")
                 
                 # Convert image to base64 for display
-                with open(file_path, "rb") as image_file:
-                    encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+                try:
+                    with open(file_path, "rb") as image_file:
+                        encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+                except Exception as e:
+                    flash(f"Error encoding image: {e}", "danger")
+                    return redirect(request.url)
                 
                 # Render result template
                 return render_template('validation_result.html', 
@@ -292,7 +330,9 @@ def validate_image():
                                       image_name=file.filename)
             
             except Exception as e:
-                flash(f"Error predicting image: {e}", "danger")
+                flash(f"Error in validation process: {e}", "danger")
+                import traceback
+                traceback.print_exc()
                 return redirect(request.url)
         else:
             flash(f"Invalid file type. Allowed types: {', '.join(AppConfig.ALLOWED_EXTENSIONS)}", "danger")
@@ -306,6 +346,19 @@ def validate_image():
 def uploaded_file(filename):
     """Serve uploaded files."""
     return send_from_directory(AppConfig.UPLOAD_DIR, filename)
+
+
+@app.route('/results/<path:filepath>')
+def serve_results(filepath):
+    """Serve files from the results directory (images, plots, etc.)."""
+    # Extract the directory part from the filepath
+    directory = os.path.dirname(filepath)
+    filename = os.path.basename(filepath)
+    
+    # Construct the full directory path
+    full_dir_path = os.path.join(AppConfig.RESULTS_DIR, directory)
+    
+    return send_from_directory(full_dir_path, filename)
 
 
 if __name__ == '__main__':

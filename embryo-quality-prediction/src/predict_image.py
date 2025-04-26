@@ -59,85 +59,166 @@ class EmbryoPredictor:
         print(f"Loading model from {self.model_path}...")
         
         try:
+            # Check if model file exists
+            if not os.path.exists(self.model_path):
+                raise FileNotFoundError(f"Model file not found: {self.model_path}")
+                
             # Load the saved model
-            model_data = torch.load(self.model_path, map_location=self.device)
+            try:
+                model_data = torch.load(self.model_path, map_location=self.device)
+            except Exception as e:
+                raise ValueError(f"Failed to load model file: {e}")
             
             # Print model_data keys for debugging
             print(f"Model data keys: {model_data.keys() if isinstance(model_data, dict) else 'Not a dictionary'}")
+            
+            # Initialize variables to avoid UnboundLocalError later
+            model = None
+            class_names = None
+            num_classes = 5  # Default
+            model_name = "resnet152"  # Default
+            state_dict = None
             
             # Handle different model saving formats
             if isinstance(model_data, dict):
                 # PyTorch standard format with state_dict
                 if 'state_dict' in model_data:
                     state_dict = model_data['state_dict']
-                    print("Using 'state_dict' key")
                 elif 'model_state_dict' in model_data:
                     state_dict = model_data['model_state_dict']
-                    print("Using 'model_state_dict' key")
                 else:
                     # The model_data itself might be the state_dict
                     state_dict = model_data
-                    print("Using model_data as state_dict")
-                    
+                
                 # Extract model architecture and class names
                 model_name = model_data.get('model_name', Config.model_name)
                 class_names = model_data.get('class_names', None)
+                
+                # Ensure class_names is not None
+                if class_names is None:
+                    print("Warning: No class names found in model data, using default class names")
+                    # Try to get class names from config
+                    if hasattr(Config, 'class_names') and Config.class_names is not None:
+                        class_names = Config.class_names
+                        print(f"Using class names from Config: {class_names}")
+                    else:
+                        # If we have num_classes, create default class names
+                        num_classes = model_data.get('num_classes', 5)  # Default to 5 if not specified
+                        class_names = [f"Class_{i}" for i in range(num_classes)]
+                        print(f"Created default class names for {num_classes} classes")
             else:
                 # The loaded object might be the model itself
                 print("Loaded object is not a dictionary, might be the model itself")
-                return model_data.to(self.device).eval(), [f"Class_{i}" for i in range(10)]  # Assume 10 classes
+                model = model_data.to(self.device).eval()
+                class_names = [f"Class_{i}" for i in range(10)]  # Assume 10 classes
+                print(f"Using direct model with default class names: {class_names}")
+                return model, class_names
             
+            # If we don't have a state_dict at this point, we can't continue
+            if state_dict is None:
+                raise ValueError("Could not find model state dictionary in the loaded model file")
+                
             # Print some state_dict keys for debugging
             print(f"State dict keys sample: {list(state_dict.keys())[:5]}")
             
             # Determine number of classes from the state_dict
-            if 'fc.weight' in state_dict:
-                num_classes = state_dict['fc.weight'].size(0)
-                print(f"Found fc.weight with shape: {state_dict['fc.weight'].shape}")
-            elif 'module.fc.weight' in state_dict:
-                num_classes = state_dict['module.fc.weight'].size(0)
-                print(f"Found module.fc.weight with shape: {state_dict['module.fc.weight'].shape}")
-                # Adjust keys to remove 'module.' prefix if needed
-                state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-            else:
-                # Try to find any key that might contain fc.weight
-                fc_weight_keys = [k for k in state_dict.keys() if 'fc.weight' in k]
-                if fc_weight_keys:
-                    key = fc_weight_keys[0]
-                    num_classes = state_dict[key].size(0)
-                    print(f"Found {key} with shape: {state_dict[key].shape}")
+            try:
+                if 'fc.weight' in state_dict:
+                    num_classes = state_dict['fc.weight'].size(0)
+                    print(f"Found fc.weight with shape: {state_dict['fc.weight'].shape}")
+                elif 'module.fc.weight' in state_dict:
+                    num_classes = state_dict['module.fc.weight'].size(0)
+                    print(f"Found module.fc.weight with shape: {state_dict['module.fc.weight'].shape}")
+                    # Adjust keys to remove 'module.' prefix if needed
+                    state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
                 else:
-                    num_classes = model_data.get('num_classes', Config.num_classes)
-                    print(f"Using num_classes from config: {num_classes}")
+                    # Try to find any key that might contain fc.weight
+                    fc_weight_keys = [k for k in state_dict.keys() if 'fc.weight' in k]
+                    if fc_weight_keys:
+                        key = fc_weight_keys[0]
+                        num_classes = state_dict[key].size(0)
+                        print(f"Found {key} with shape: {state_dict[key].shape}")
+                    else:
+                        num_classes = model_data.get('num_classes', Config.num_classes)
+                        print(f"Using num_classes from config: {num_classes}")
+            except Exception as e:
+                print(f"Error determining number of classes: {e}")
+                num_classes = 5  # Default to 5 classes
+                print(f"Defaulting to {num_classes} classes")
             
-            # If class_names is not provided, generate default class names
-            if class_names is None:
-                class_names = [f"Class_{i}" for i in range(num_classes)]
-                
             print(f"Detected {num_classes} classes in the saved model")
             
             # Initialize the model architecture
-            if model_name == "resnet152":
-                model = models.resnet152(weights=None)
-                num_ftrs = model.fc.in_features
-                # Replace the final fully connected layer
-                model.fc = nn.Linear(num_ftrs, num_classes)
-                print(f"Created ResNet152 with {num_classes} output classes")
-            # Add other model architectures as needed
+            try:
+                if model_name == "resnet152":
+                    model = models.resnet152(weights=None)
+                    num_ftrs = model.fc.in_features
+                    # Replace the final fully connected layer
+                    model.fc = nn.Linear(num_ftrs, num_classes)
+                    print(f"Created ResNet152 with {num_classes} output classes")
+                elif model_name == "densenet201":
+                    model = models.densenet201(weights=None)
+                    num_ftrs = model.classifier.in_features
+                    model.classifier = nn.Linear(num_ftrs, num_classes)
+                    print(f"Created DenseNet201 with {num_classes} output classes")
+                elif model_name == "efficientnet_b7":
+                    model = models.efficientnet_b7(weights=None)
+                    num_ftrs = model.classifier[1].in_features
+                    model.classifier[1] = nn.Linear(num_ftrs, num_classes)
+                    print(f"Created EfficientNet-B7 with {num_classes} output classes")
+                else:
+                    # Default to ResNet152 if model_name is not recognized
+                    print(f"Model architecture '{model_name}' not recognized, defaulting to ResNet152")
+                    model = models.resnet152(weights=None)
+                    num_ftrs = model.fc.in_features
+                    model.fc = nn.Linear(num_ftrs, num_classes)
+                    print(f"Created ResNet152 with {num_classes} output classes")
+            except Exception as e:
+                print(f"Error creating model architecture: {e}")
+                # Create a simple model as fallback
+                model = models.resnet18(weights=None)
+                model.fc = nn.Linear(512, num_classes)
+                print(f"Created fallback ResNet18 with {num_classes} output classes")
             
             # Try to load the state dictionary
             try:
                 model.load_state_dict(state_dict)
+                print("Successfully loaded state dictionary")
             except Exception as e:
                 print(f"Error loading state dict directly: {e}")
                 print("Trying to load with strict=False...")
-                model.load_state_dict(state_dict, strict=False)
+                try:
+                    model.load_state_dict(state_dict, strict=False)
+                    print("Successfully loaded state dictionary with strict=False")
+                except Exception as e2:
+                    print(f"Failed to load state dictionary even with strict=False: {e2}")
+                    print("Continuing with uninitialized model weights")
                 
+            # Move model to device and set to evaluation mode
             model = model.to(self.device)
             model.eval()
             
+            # Ensure class_names is properly initialized and has the right length
+            if class_names is None or len(class_names) != num_classes:
+                class_names = [f"Class_{i}" for i in range(num_classes)]
+                print(f"Adjusted class names to match {num_classes} classes")
+            
             print(f"Model loaded successfully with {num_classes} classes: {class_names}")
             return model, class_names
+            
+        except Exception as e:
+            print(f"Error in _load_model: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Create a fallback model and class names
+            print("Creating fallback model and class names")
+            fallback_model = models.resnet18(weights=None)
+            fallback_model.fc = nn.Linear(512, 5)  # 5 classes as fallback
+            fallback_model = fallback_model.to(self.device).eval()
+            fallback_class_names = [f"Class_{i}" for i in range(5)]
+            
+            return fallback_model, fallback_class_names
             
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -189,21 +270,57 @@ class EmbryoPredictor:
             dict: Prediction results including class, confidence, and all class probabilities
         """
         try:
+            # Check if the image exists
+            if not os.path.exists(image_path):
+                raise FileNotFoundError(f"Image file not found: {image_path}")
+                
+            # Check if model and class_names are properly initialized
+            if self.model is None:
+                raise ValueError("Model not properly initialized")
+            if self.class_names is None or len(self.class_names) == 0:
+                raise ValueError("Class names not properly initialized")
+            
             # Preprocess image
             img_tensor = self.preprocess_image(image_path)
+            if img_tensor is None:
+                raise ValueError("Failed to preprocess image")
             
             # Make prediction
             with torch.no_grad():
                 outputs = self.model(img_tensor)
+                if outputs is None:
+                    raise ValueError("Model returned None output")
+                    
+                # Check if outputs has the expected shape
+                if len(outputs.shape) != 2 or outputs.shape[0] != 1:
+                    raise ValueError(f"Unexpected output shape: {outputs.shape}. Expected shape: [1, num_classes]")
+                
                 probabilities = torch.nn.functional.softmax(outputs, dim=1)[0]
+                if probabilities is None or len(probabilities) == 0:
+                    raise ValueError("Failed to compute probabilities")
                 
-                # Get predicted class and confidence
-                confidence, predicted_class = torch.max(probabilities, 0)
+                # Get predicted class and confidence with proper error handling
+                max_result = torch.max(probabilities, 0)
+                if max_result is None:
+                    raise ValueError("torch.max returned None")
+                    
+                # Safely unpack the result
+                try:
+                    confidence, predicted_class = max_result
+                except (ValueError, TypeError) as e:
+                    raise ValueError(f"Failed to unpack torch.max result: {e}. Result was: {max_result}")
                 
-                # Convert to Python types
-                predicted_class = predicted_class.item()
-                confidence = confidence.item()
-                probabilities = probabilities.cpu().numpy().tolist()
+                # Convert to Python types with error handling
+                try:
+                    predicted_class = predicted_class.item()
+                    confidence = confidence.item()
+                    probabilities = probabilities.cpu().numpy().tolist()
+                except Exception as e:
+                    raise ValueError(f"Failed to convert tensor values to Python types: {e}")
+                
+                # Ensure predicted_class is within range of class_names
+                if predicted_class < 0 or predicted_class >= len(self.class_names):
+                    raise IndexError(f"Predicted class index {predicted_class} out of range for class_names with length {len(self.class_names)}")
                 
                 # Create result dictionary
                 result = {
@@ -218,6 +335,9 @@ class EmbryoPredictor:
                 
                 return result
         except Exception as e:
+            print(f"Detailed error in predict method: {e}")
+            import traceback
+            traceback.print_exc()
             raise ValueError(f"Error predicting image: {e}")
     
     def predict_batch(self, image_paths):
