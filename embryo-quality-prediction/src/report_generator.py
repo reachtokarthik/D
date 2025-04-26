@@ -15,11 +15,23 @@ class ReportGenerator:
     Updates the report incrementally as each step of the workflow completes.
     """
     
-    def __init__(self, project_root):
+    def __init__(self, project_root, model_name="model"):
         """Initialize the report generator with project paths."""
         self.project_root = project_root
-        self.report_path = os.path.join(project_root, "model_report.html")
-        self.plots_dir = os.path.join(project_root, "outputs", "plots")
+        self.model_name = model_name
+        
+        # Create timestamp for this report
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create model-specific directories
+        self.model_dir = os.path.join(project_root, "outputs", "results", f"{model_name}_{self.timestamp}")
+        os.makedirs(self.model_dir, exist_ok=True)
+        
+        # Set report path with model name and timestamp
+        self.report_path = os.path.join(self.model_dir, f"{model_name}_report.html")
+        
+        # Create model-specific plots directory
+        self.plots_dir = os.path.join(self.model_dir, "plots")
         os.makedirs(self.plots_dir, exist_ok=True)
         
         # Check if running in Colab
@@ -29,6 +41,7 @@ class ReportGenerator:
         
         # Initialize report data structure
         self.report_data = {
+            "model_name": model_name,
             "class_distribution": {},
             "normalization": {},
             "split_info": {},
@@ -48,12 +61,12 @@ class ReportGenerator:
     
     def _get_html_template(self):
         """Return the HTML template for the report."""
-        return """<!DOCTYPE html>
+        return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Embryo Quality Prediction - Model Report</title>
+    <title>Embryo Quality Prediction - {self.model_name} - Model Report</title>
     <style>
         :root {
             --primary-color: #4a6fa5;
@@ -219,7 +232,7 @@ class ReportGenerator:
     <div class="container">
         <header>
             <h1>Embryo Quality Prediction</h1>
-            <p>Model Training and Evaluation Report</p>
+            <p>Model: <span id="model_name">{self.model_name}</span> - Training and Evaluation Report</p>
             <p>Generated on: <span id="date">TIMESTAMP</span></p>
         </header>
         
@@ -877,10 +890,50 @@ class ReportGenerator:
     
     def save_report_data(self):
         """Save report data to JSON file for later reference."""
-        json_path = os.path.join(self.project_root, "outputs", "report_data.json")
-        
         try:
-            with open(json_path, 'w') as f:
+            # Save report data as JSON with model name and timestamp
+            report_data_path = os.path.join(self.model_dir, f"{self.model_name}_report_data.json")
+            with open(report_data_path, 'w') as f:
                 json.dump(self.report_data, f, indent=4)
+            print(f"Report data saved to {report_data_path}")
+            
+            # Also save a summary file with key metrics
+            summary_data = {
+                "model_name": self.model_name,
+                "timestamp": self.timestamp,
+                "formatted_timestamp": self.report_data["timestamp"],
+                "training_time": self.report_data.get("training_metrics", {}).get("training_time", "N/A"),
+                "accuracy": self.report_data.get("evaluation_metrics", {}).get("accuracy", "N/A"),
+                "precision": self.report_data.get("evaluation_metrics", {}).get("precision", "N/A"),
+                "recall": self.report_data.get("evaluation_metrics", {}).get("recall", "N/A"),
+                "f1_score": self.report_data.get("evaluation_metrics", {}).get("f1_score", "N/A"),
+                "report_path": self.report_path
+            }
+            
+            # Save summary to model directory
+            summary_path = os.path.join(self.model_dir, f"{self.model_name}_summary.json")
+            with open(summary_path, 'w') as f:
+                json.dump(summary_data, f, indent=4)
+                
+            # Also save to a master summary file that contains all model runs
+            master_summary_path = os.path.join(self.project_root, "outputs", "results", "all_models_summary.json")
+            
+            # Load existing summary if it exists
+            all_models = []
+            if os.path.exists(master_summary_path):
+                try:
+                    with open(master_summary_path, 'r') as f:
+                        all_models = json.load(f)
+                except:
+                    all_models = []
+            
+            # Append this model's summary
+            all_models.append(summary_data)
+            
+            # Save updated summary
+            with open(master_summary_path, 'w') as f:
+                json.dump(all_models, f, indent=4)
+                
+            print(f"Model summary saved to {summary_path} and added to master summary")
         except Exception as e:
-            print(f"Error saving report data: {e}")
+            print(f"Error saving report data: {str(e)}")

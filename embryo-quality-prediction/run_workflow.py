@@ -21,8 +21,9 @@ from os import path
 from datetime import datetime
 import torch
 
-# Import report generator
+# Import report generator and model report manager
 from src.report_generator import ReportGenerator
+from src.model_report_generator import ModelReportManager
 
 # Check if running in Google Colab
 IN_COLAB = 'google.colab' in str(globals())
@@ -501,10 +502,29 @@ def main():
     # Generate final report
     print_section_header("GENERATING FINAL REPORT")
     try:
-        report_generator = ReportGenerator(PROJECT_ROOT)
-        report_path = os.path.join(PROJECT_ROOT, "model_report.html")
+        # Get the model name from environment variable
+        model_name = os.environ.get("EMBRYO_MODEL_SELECTION", "model")
+        
+        # Create timestamp for this report
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Initialize report generator with model name
+        report_generator = ReportGenerator(PROJECT_ROOT, model_name=model_name)
+        
+        # Get the report path from the generator
+        report_path = report_generator.report_path
+        
         print(f"✅ Final report generated successfully")
         print(f"📊 Report saved to: {report_path}")
+        
+        # Generate a summary of all models
+        try:
+            print("\nGenerating model comparison summary...")
+            model_manager = ModelReportManager(PROJECT_ROOT)
+            models_df = model_manager.list_models(sort_by="accuracy", ascending=False)
+            print(f"✅ Model summary updated with {len(models_df)} models")
+        except Exception as summary_err:
+            print(f"⚠️ Warning: Could not generate model summary: {str(summary_err)}")
         
         # Open the report in browser or display in Colab
         if IN_COLAB:
@@ -529,7 +549,7 @@ def main():
         else:
             import webbrowser
             print("Opening report in browser...")
-            webbrowser.open(f"file://{report_path}")
+            webbrowser.open(f"file://{os.path.abspath(report_path)}")
     except Exception as e:
         print(f"⚠️ Warning: Could not generate final report: {str(e)}")
     
@@ -537,6 +557,10 @@ def main():
     print_section_header("WORKFLOW COMPLETE")
     print(f"Workflow completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("All steps executed successfully!")
+    
+    # Provide information about viewing model reports
+    print("\nTo view and compare all model reports, run:")
+    print(f"python {os.path.join('src', 'model_report_generator.py')}")
 
 if __name__ == "__main__":
     # Parse command line arguments

@@ -98,9 +98,9 @@ def get_transforms():
     return train_transform, val_test_transform
 
 # Load datasets
-def load_datasets():
-    # Initialize report generator
-    report_generator = ReportGenerator(PROJECT_ROOT)
+def load_datasets(model_name="model"):
+    # Initialize report generator with model name
+    report_generator = ReportGenerator(PROJECT_ROOT, model_name=model_name)
     
     train_transform, val_test_transform = get_transforms()
     
@@ -274,7 +274,10 @@ def get_model(model_name, num_classes, pretrained=True):
     return model
 
 # Training function
-def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs):
+def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs, model_name=None):
+    # Use model name from Config if not provided
+    if model_name is None:
+        model_name = Config.model_name
     # Initialize report generator
     report_generator = ReportGenerator(PROJECT_ROOT)
     
@@ -817,17 +820,22 @@ def main():
     
     # Select model architecture
     Config.model_name = select_model()
+    
+    # Create timestamp for this training run
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_run_id = f"{Config.model_name}_{timestamp}"
         
     print(f"\nStarting model training for embryo quality prediction")
     print(f"   - Model: {Config.model_name}")
+    print(f"   - Run ID: {model_run_id}")
     print(f"   - Device: {Config.device}")
     print(f"   - Batch size: {Config.batch_size}")
     print(f"   - Learning rate: {Config.learning_rate}")
     print(f"   - Optimizer: {Config.optimizer_name}")
         
-    # Load datasets
+    # Load datasets with model name for report generation
     print("\nLoading datasets...")
-    train_loader, val_loader, test_loader, class_names = load_datasets()
+    train_loader, val_loader, test_loader, class_names = load_datasets(model_name=Config.model_name)
     print(f"Datasets loaded with {len(class_names)} classes: {class_names}")
         
     # Initialize model
@@ -857,8 +865,8 @@ def main():
     # Learning rate scheduler
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=Config.scheduler_patience, verbose=True)
     
-    # Train the model
-    model, train_losses, val_losses, train_accs, val_accs = train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, Config.num_epochs)
+    # Train the model with model name
+    model, train_losses, val_losses, train_accs, val_accs = train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, Config.num_epochs, model_name=Config.model_name)
     
     # Plot training results
     plot_training_results(train_losses, val_losses, train_accs, val_accs)
@@ -871,8 +879,19 @@ def main():
     recall = report['weighted avg']['recall']
     f1 = report['weighted avg']['f1-score']
     
-    # Save the final model
-    torch.save({
+    # Create model-specific directory for this run
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_run_id = f"{Config.model_name}_{timestamp}"
+    model_run_dir = os.path.join(Config.results_dir, model_run_id)
+    os.makedirs(model_run_dir, exist_ok=True)
+    
+    # Save the final model in the model-specific directory
+    model_save_path = os.path.join(model_run_dir, f"{Config.model_name}_final.pth")
+    
+    # Also save in the main models directory for backward compatibility
+    main_model_path = os.path.join(Config.output_dir, f"{Config.model_name}_final.pth")
+    
+    model_data = {
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'accuracy': accuracy,
@@ -880,6 +899,7 @@ def main():
         'recall': recall,
         'f1_score': f1,
         'class_names': Config.class_names,
+        'timestamp': timestamp,
         'config': {
             'model_name': Config.model_name,
             'img_size': Config.img_size,
@@ -887,11 +907,19 @@ def main():
             'std': Config.std,
             'num_classes': Config.num_classes
         }
-    }, os.path.join(Config.output_dir, f"{Config.model_name}_final.pth"))
+    }
+    
+    # Save to both locations
+    torch.save(model_data, model_save_path)
+    torch.save(model_data, main_model_path)
     
     print(f"\n\u2705 Model training and evaluation complete!")
     print(f"   - Final test accuracy: {accuracy:.4f}")
-    print(f"   - Model saved to {os.path.join(Config.output_dir, f'{Config.model_name}_final.pth')}")
+    print(f"   - Precision: {precision:.4f}")
+    print(f"   - Recall: {recall:.4f}")
+    print(f"   - F1 Score: {f1:.4f}")
+    print(f"   - Model saved to {model_save_path}")
+    print(f"   - Results directory: {model_run_dir}")
 
 # Main execution
 if __name__ == "__main__":
