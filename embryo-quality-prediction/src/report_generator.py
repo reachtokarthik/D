@@ -787,44 +787,42 @@ class ReportGenerator:
             encodings = ['utf-8', 'latin-1', 'cp1252']
             html = None
             
-            for encoding in encodings:
-                try:
-                    with open(self.report_path, 'r', encoding=encoding) as f:
-                        html = f.read()
-                    break  # If successful, break the loop
-                except UnicodeDecodeError:
-                    continue
-            
-            if html is None:
-                print(f"Could not read HTML file with any of the attempted encodings")
-                return
-            
-            # Find the element by ID
-            element_start = html.find(f'id="{element_id}"')
-            if element_start == -1:
-                print(f"Element with ID '{element_id}' not found in HTML")
-                return
-            
-            # Find the content between opening and closing tags
-            tag_start = html.rfind('<', 0, element_start)
-            tag_name_end = html.find(' ', tag_start)
-            tag_name = html[tag_start+1:tag_name_end]
-            
-            # Find the closing tag
-            closing_tag = f'</{tag_name}>'
-            content_start = html.find('>', element_start) + 1
-            content_end = html.find(closing_tag, content_start)
-            
-            # Replace the content
-            new_html = html[:content_start] + content + html[content_end:]
-            
-            # Write with utf-8 encoding
-            with open(self.report_path, 'w', encoding='utf-8') as f:
-                f.write(new_html)
-                
-        except Exception as e:
-            print(f"Error updating HTML element: {e}")
-    
+    except Exception as e:
+        print(f"Error updating HTML element: {e}")
+
+def _update_html_image(self, image_id, image_path):
+    """Update an image in the HTML report."""
+    try:
+        # Read the current HTML content
+        with open(self.report_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Find the image by ID
+        img_tag = f'<img id="{image_id}"'
+        
+        img_pos = html_content.find(img_tag)
+        if img_pos == -1:
+            print(f"Image with ID '{image_id}' not found in HTML")
+            return
+        
+        # Find src attribute
+        src_start = html_content.find('src="', img_pos) + 5
+        src_end = html_content.find('"', src_start)
+        
+        # In Colab, use data URLs instead of file paths
+        if self.in_colab and os.path.exists(image_path):
+            try:
+                with open(image_path, 'rb') as img_file:
+                    img_data = base64.b64encode(img_file.read()).decode('utf-8')
+                img_type = image_path.split('.')[-1].lower()
+                if img_type == 'jpg':
+                    img_type = 'jpeg'
+                data_url = f'data:image/{img_type};base64,{img_data}'
+                new_src = data_url
+                print(f"Embedded image {image_id} as data URL for Colab compatibility")
+            except Exception as img_err:
+                print(f"Could not embed image as data URL: {img_err}")
+                # Fallback to relative path
     def _update_html_image(self, image_id, image_path):
         """Update an image in the HTML report."""
         try:

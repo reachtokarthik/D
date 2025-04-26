@@ -11,7 +11,15 @@ from datetime import datetime
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 
 # Import the report generator
-from src.report_generator import ReportGenerator
+try:
+    # When imported from run_workflow.py
+    from src.simple_report import SimpleReportGenerator as ReportGenerator
+except ImportError:
+    # When run directly
+    import sys
+    import os.path as path
+    sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+    from src.simple_report import SimpleReportGenerator as ReportGenerator
 
 print("Starting embryo quality prediction training script...")
 
@@ -933,5 +941,18 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(f"\n Error during training: {e}")
+        print("\nDetailed traceback:")
         traceback.print_exc()
         print("\nStack trace printed above.")
+        
+        # Print local variables in the frame where the error occurred
+        import sys
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        if exc_traceback:
+            print("\nLocal variables in the frame where the error occurred:")
+            frame = exc_traceback.tb_frame
+            while frame:
+                if 'primary' in frame.f_locals:
+                    print(f"Found 'primary' in frame {frame.f_code.co_name} at {frame.f_code.co_filename}:{frame.f_lineno}")
+                    print(f"Value of 'primary': {frame.f_locals['primary']}")
+                frame = frame.f_back

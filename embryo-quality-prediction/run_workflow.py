@@ -22,7 +22,7 @@ from datetime import datetime
 import torch
 
 # Import report generator and model report manager
-from src.report_generator import ReportGenerator
+from src.simple_report import SimpleReportGenerator as ReportGenerator
 from src.model_report_generator import ModelReportManager
 
 # Check if running in Google Colab

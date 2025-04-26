@@ -16,9 +16,36 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
-from tabulate import tabulate
 import webbrowser
 from pathlib import Path
+
+# Try to import tabulate, but provide a fallback if not available
+try:
+    from tabulate import tabulate
+    HAS_TABULATE = True
+except ImportError:
+    HAS_TABULATE = False
+    # Define a simple fallback for tabulate
+    def tabulate(data, headers='keys', tablefmt='pretty', showindex=False):
+        """Simple fallback for tabulate function"""
+        if isinstance(data, pd.DataFrame):
+            return data.to_string(index=showindex)
+        else:
+            # Simple string representation for lists of lists
+            result = []
+            if headers == 'keys' and isinstance(data[0], dict):
+                headers = list(data[0].keys())
+                result.append('  '.join(str(h) for h in headers))
+                result.append('-' * len(result[0]))
+                for row in data:
+                    result.append('  '.join(str(row.get(h, '')) for h in headers))
+            else:
+                if headers and headers != 'keys':
+                    result.append('  '.join(str(h) for h in headers))
+                    result.append('-' * len(result[0]))
+                for row in data:
+                    result.append('  '.join(str(cell) for cell in row))
+            return '\n'.join(result)
 
 class ModelReportManager:
     """
