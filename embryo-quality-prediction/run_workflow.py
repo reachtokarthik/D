@@ -539,6 +539,20 @@ def main():
     print("All steps executed successfully!")
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Run embryo quality prediction workflow')
+    parser.add_argument('--test', action='store_true', help='Run in test mode with just 1 epoch')
+    args = parser.parse_args()
+    
+    # If in test mode, override Config epochs
+    if args.test:
+        print("\n🧪 RUNNING IN TEST MODE - ONLY 1 EPOCH\n")
+        # Import and modify Config
+        from src.train_model import Config
+        Config.num_epochs = 1
+        print(f"Training will run for {Config.num_epochs} epoch only")
+    
     try:
         main()
     except KeyboardInterrupt:

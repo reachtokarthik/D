@@ -766,32 +766,46 @@ class ReportGenerator:
         </table>"""
         
         return html
-    
+        
     def _update_html_element(self, element_id, content):
-        """Update an HTML element with new content."""
+        """Update an HTML element in the report."""
         try:
-            with open(self.report_path, 'r', encoding='utf-8') as f:
-                html = f.read()
+            # Try different encodings to handle potential encoding issues
+            encodings = ['utf-8', 'latin-1', 'cp1252']
+            html = None
+            
+            for encoding in encodings:
+                try:
+                    with open(self.report_path, 'r', encoding=encoding) as f:
+                        html = f.read()
+                    break  # If successful, break the loop
+                except UnicodeDecodeError:
+                    continue
+            
+            if html is None:
+                print(f"Could not read HTML file with any of the attempted encodings")
+                return
             
             # Find the element by ID
-            start_tag = f'<div id="{element_id}"'
-            end_tag = '</div>'
-            
-            start_pos = html.find(start_tag)
-            if start_pos == -1:
+            element_start = html.find(f'id="{element_id}"')
+            if element_start == -1:
                 print(f"Element with ID '{element_id}' not found in HTML")
                 return
             
+            # Find the content between opening and closing tags
+            tag_start = html.rfind('<', 0, element_start)
+            tag_name_end = html.find(' ', tag_start)
+            tag_name = html[tag_start+1:tag_name_end]
+            
             # Find the closing tag
-            content_start = html.find('>', start_pos) + 1
-            content_end = html.find(end_tag, content_start)
+            closing_tag = f'</{tag_name}>'
+            content_start = html.find('>', element_start) + 1
+            content_end = html.find(closing_tag, content_start)
             
             # Replace the content
-            new_html = html[:content_start] + '\n' + content + '\n' + html[content_end:]
+            new_html = html[:content_start] + content + html[content_end:]
             
-            # Update timestamp
-            new_html = new_html.replace('TIMESTAMP', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            
+            # Write with utf-8 encoding
             with open(self.report_path, 'w', encoding='utf-8') as f:
                 f.write(new_html)
                 
@@ -801,8 +815,21 @@ class ReportGenerator:
     def _update_html_image(self, image_id, image_path):
         """Update an image in the HTML report."""
         try:
-            with open(self.report_path, 'r', encoding='utf-8') as f:
-                html = f.read()
+            # Try different encodings to handle potential encoding issues
+            encodings = ['utf-8', 'latin-1', 'cp1252']
+            html = None
+            
+            for encoding in encodings:
+                try:
+                    with open(self.report_path, 'r', encoding=encoding) as f:
+                        html = f.read()
+                    break  # If successful, break the loop
+                except UnicodeDecodeError:
+                    continue
+            
+            if html is None:
+                print(f"Could not read HTML file with any of the attempted encodings")
+                return
             
             # Find the image by ID
             img_tag = f'<img id="{image_id}"'

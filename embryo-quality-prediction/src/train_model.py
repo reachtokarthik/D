@@ -278,7 +278,116 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
     # Initialize report generator
     report_generator = ReportGenerator(PROJECT_ROOT)
     
+    # Check if running in Colab
+    in_colab = 'google.colab' in str(globals())
+    if in_colab:
+        print("\n📊 Running in Google Colab - will display training progress in notebook")
+        try:
+            from IPython.display import clear_output
+            import matplotlib.pyplot as plt
+            from matplotlib.gridspec import GridSpec
+            
+            # Function to display training progress in Colab
+            def display_progress(train_losses, val_losses, train_accs, val_accs):
+                clear_output(wait=True)
+                
+                fig = plt.figure(figsize=(12, 10))
+                gs = GridSpec(2, 2, figure=fig)
+                
+                # Loss plot
+                ax1 = fig.add_subplot(gs[0, :])
+                ax1.plot(train_losses, label='Training Loss')
+                ax1.plot(val_losses, label='Validation Loss')
+                ax1.set_title('Training and Validation Loss')
+                ax1.set_xlabel('Epoch')
+                ax1.set_ylabel('Loss')
+                ax1.legend()
+                ax1.grid(True)
+                
+                # Accuracy plot
+                ax2 = fig.add_subplot(gs[1, 0])
+                ax2.plot(train_accs, label='Training Accuracy')
+                ax2.plot(val_accs, label='Validation Accuracy')
+                ax2.set_title('Training and Validation Accuracy')
+                ax2.set_xlabel('Epoch')
+                ax2.set_ylabel('Accuracy')
+                ax2.legend()
+                ax2.grid(True)
+                
+                # Metrics table
+                ax3 = fig.add_subplot(gs[1, 1])
+                ax3.axis('tight')
+                ax3.axis('off')
+                
+                # Create metrics table
+                last_epoch = len(train_losses) - 1
+                best_val_acc_epoch = val_accs.index(max(val_accs))
+                best_val_loss_epoch = val_losses.index(min(val_losses))
+                
+                table_data = [
+                    ['Metric', 'Value', 'Epoch'],
+                    ['Current Train Loss', f'{train_losses[-1]:.4f}', last_epoch + 1],
+                    ['Current Val Loss', f'{val_losses[-1]:.4f}', last_epoch + 1],
+                    ['Current Train Acc', f'{train_accs[-1]:.4f}', last_epoch + 1],
+                    ['Current Val Acc', f'{val_accs[-1]:.4f}', last_epoch + 1],
+                    ['Best Val Acc', f'{max(val_accs):.4f}', best_val_acc_epoch + 1],
+                    ['Best Val Loss', f'{min(val_losses):.4f}', best_val_loss_epoch + 1],
+                ]
+                
+                ax3.table(cellText=table_data, loc='center', cellLoc='center')
+                ax3.set_title('Training Metrics Summary')
+                
+                plt.tight_layout()
+                plt.show()
+                
+                # Print current status
+                print(f"Epoch {last_epoch+1}/{num_epochs} - "
+                      f"Train Loss: {train_losses[-1]:.4f}, Train Acc: {train_accs[-1]:.4f} - "
+                      f"Val Loss: {val_losses[-1]:.4f}, Val Acc: {val_accs[-1]:.4f}")
+                
+                if last_epoch > 0:
+                    if val_losses[-1] < val_losses[-2]:
+                        print(f"✅ Validation loss improved from {val_losses[-2]:.4f} to {val_losses[-1]:.4f}")
+                    else:
+                        print(f"⚠️ Validation loss did not improve from {val_losses[-2]:.4f}")
+        except Exception as e:
+            print(f"Could not initialize Colab visualization: {e}")
+            display_progress = None
+    else:
+        display_progress = None
+    
+    # Detect hardware and optimize accordingly
     device = Config.device
+    
+    # Check if CUDA is available and optimize for GPU
+    if device.type == 'cuda':
+        print(f"\n🚀 GPU detected: {torch.cuda.get_device_name(0)}")
+        print(f"Optimizing for GPU training...")
+        
+        # Enable cuDNN benchmark for faster training
+        torch.backends.cudnn.benchmark = True
+        
+        # Use mixed precision training if available (PyTorch >= 1.6)
+        try:
+            from torch.cuda.amp import autocast, GradScaler
+            scaler = GradScaler()
+            use_amp = True
+            print("✅ Using mixed precision training (faster GPU training)")
+        except ImportError:
+            use_amp = False
+            print("⚠️ Mixed precision training not available (PyTorch < 1.6)")
+    else:
+        print("\n💻 Training on CPU")
+        print("Optimizing for CPU training...")
+        use_amp = False
+        
+        # For CPU: Set number of threads for better performance
+        import multiprocessing
+        num_workers = min(multiprocessing.cpu_count(), 8)  # Use at most 8 workers
+        torch.set_num_threads(num_workers)
+        print(f"✅ Using {num_workers} CPU threads for computation")
+    
+    # Move model to device
     model = model.to(device)
     
     # Update report with training parameters
@@ -329,18 +438,32 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]")
         
         for inputs, labels in train_pbar:
-            inputs, labels = inputs.to(device), labels.to(device)
+            # Move data to device (non-blocking for faster data transfer on GPU)
+            inputs = inputs.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             
-            # Zero the parameter gradients
-            optimizer.zero_grad()
+            # Zero the parameter gradients - use set_to_none for better performance
+            optimizer.zero_grad(set_to_none=True)
             
-            # Forward pass
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            
-            # Backward pass and optimize
-            loss.backward()
-            optimizer.step()
+            # Use mixed precision for faster GPU training if available
+            if use_amp and device.type == 'cuda':
+                with autocast():
+                    # Forward pass
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
+                
+                # Backward pass with gradient scaling
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                # Standard forward pass
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                
+                # Standard backward pass
+                loss.backward()
+                optimizer.step()
             
             # Track statistics
             running_loss += loss.item() * inputs.size(0)
@@ -348,11 +471,12 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
             
-            # Update progress bar
-            train_pbar.set_postfix({
-                'loss': loss.item(),
-                'acc': 100 * correct / total
-            })
+            # Update progress bar (less frequently for better performance)
+            if train_pbar.n % 5 == 0 or train_pbar.n == len(train_loader) - 1:
+                train_pbar.set_postfix({
+                    'loss': loss.item(),
+                    'acc': 100 * correct / total
+                })
         
         epoch_train_loss = running_loss / len(train_loader.dataset)
         epoch_train_acc = correct / total
@@ -371,11 +495,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
             val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]")
             
             for inputs, labels in val_pbar:
-                inputs, labels = inputs.to(device), labels.to(device)
+                # Move data to device (non-blocking for faster data transfer on GPU)
+                inputs = inputs.to(device, non_blocking=True)
+                labels = labels.to(device, non_blocking=True)
                 
-                # Forward pass
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                # Use mixed precision for faster inference if available
+                if use_amp and device.type == 'cuda':
+                    with autocast():
+                        # Forward pass
+                        outputs = model(inputs)
+                        loss = criterion(outputs, labels)
+                else:
+                    # Standard forward pass
+                    outputs = model(inputs)
+                    loss = criterion(outputs, labels)
                 
                 # Track statistics
                 running_loss += loss.item() * inputs.size(0)
@@ -383,21 +516,25 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
                 
-                # Update progress bar
-                val_pbar.set_postfix({
-                    'loss': loss.item(),
-                    'acc': 100 * correct / total
-                })
+                # Update progress bar (less frequently for better performance)
+                if val_pbar.n % 5 == 0 or val_pbar.n == len(val_loader) - 1:
+                    val_pbar.set_postfix({
+                        'loss': loss.item(),
+                        'acc': 100 * correct / total
+                    })
         
         epoch_val_loss = running_loss / len(val_loader.dataset)
         epoch_val_acc = correct / total
         val_losses.append(epoch_val_loss)
         val_accs.append(epoch_val_acc)
         
-        # Print epoch summary
-        print(f"Epoch {epoch+1}/{num_epochs} - "
-              f"Train Loss: {epoch_train_loss:.4f}, Train Acc: {epoch_train_acc:.4f} - "
-              f"Val Loss: {epoch_val_loss:.4f}, Val Acc: {epoch_val_acc:.4f}")
+        # Print epoch summary or display progress in Colab
+        if display_progress:
+            display_progress(train_losses, val_losses, train_accs, val_accs)
+        else:
+            print(f"Epoch {epoch+1}/{num_epochs} - "
+                  f"Train Loss: {epoch_train_loss:.4f}, Train Acc: {epoch_train_acc:.4f} - "
+                  f"Val Loss: {epoch_val_loss:.4f}, Val Acc: {epoch_val_acc:.4f}")
         
         # Learning rate scheduler step
         if scheduler:

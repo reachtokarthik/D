@@ -168,9 +168,119 @@ def build_model(model_name, num_classes):
     return model, base_model
 
 # Train model
-def train_model(model, train_generator, validation_generator, base_model=None):
+def train_model(model, train_generator, val_generator, callbacks=None):
     # Initialize report generator
     report_generator = ReportGenerator(PROJECT_ROOT)
+    
+    # Check if running in Colab
+    in_colab = 'google.colab' in str(globals())
+    if in_colab:
+        print("\n📊 Running in Google Colab - will display training progress in notebook")
+        try:
+            from IPython.display import clear_output
+            import matplotlib.pyplot as plt
+            from matplotlib.gridspec import GridSpec
+            import numpy as np
+            
+            # Custom callback to display training progress in Colab
+            class DisplayProgressCallback(tf.keras.callbacks.Callback):
+                def __init__(self):
+                    super().__init__()
+                    self.train_losses = []
+                    self.val_losses = []
+                    self.train_accs = []
+                    self.val_accs = []
+                    
+                def on_epoch_end(self, epoch, logs=None):
+                    logs = logs or {}
+                    self.train_losses.append(logs.get('loss'))
+                    self.val_losses.append(logs.get('val_loss'))
+                    self.train_accs.append(logs.get('accuracy'))
+                    self.val_accs.append(logs.get('val_accuracy'))
+                    
+                    self.display_progress(epoch)
+                
+                def display_progress(self, epoch):
+                    clear_output(wait=True)
+                    
+                    fig = plt.figure(figsize=(12, 10))
+                    gs = GridSpec(2, 2, figure=fig)
+                    
+                    # Loss plot
+                    ax1 = fig.add_subplot(gs[0, :])
+                    ax1.plot(self.train_losses, label='Training Loss')
+                    ax1.plot(self.val_losses, label='Validation Loss')
+                    ax1.set_title('Training and Validation Loss')
+                    ax1.set_xlabel('Epoch')
+                    ax1.set_ylabel('Loss')
+                    ax1.legend()
+                    ax1.grid(True)
+                    
+                    # Accuracy plot
+                    ax2 = fig.add_subplot(gs[1, 0])
+                    ax2.plot(self.train_accs, label='Training Accuracy')
+                    ax2.plot(self.val_accs, label='Validation Accuracy')
+                    ax2.set_title('Training and Validation Accuracy')
+                    ax2.set_xlabel('Epoch')
+                    ax2.set_ylabel('Accuracy')
+                    ax2.legend()
+                    ax2.grid(True)
+                    
+                    # Metrics table
+                    ax3 = fig.add_subplot(gs[1, 1])
+                    ax3.axis('tight')
+                    ax3.axis('off')
+                    
+                    # Create metrics table
+                    last_epoch = len(self.train_losses) - 1
+                    
+                    if len(self.val_accs) > 0:
+                        best_val_acc_epoch = np.argmax(self.val_accs)
+                        best_val_loss_epoch = np.argmin(self.val_losses)
+                        best_val_acc = np.max(self.val_accs)
+                        best_val_loss = np.min(self.val_losses)
+                    else:
+                        best_val_acc_epoch = 0
+                        best_val_loss_epoch = 0
+                        best_val_acc = 0
+                        best_val_loss = 0
+                    
+                    table_data = [
+                        ['Metric', 'Value', 'Epoch'],
+                        ['Current Train Loss', f'{self.train_losses[-1]:.4f}', last_epoch + 1],
+                        ['Current Val Loss', f'{self.val_losses[-1]:.4f}', last_epoch + 1],
+                        ['Current Train Acc', f'{self.train_accs[-1]:.4f}', last_epoch + 1],
+                        ['Current Val Acc', f'{self.val_accs[-1]:.4f}', last_epoch + 1],
+                        ['Best Val Acc', f'{best_val_acc:.4f}', best_val_acc_epoch + 1],
+                        ['Best Val Loss', f'{best_val_loss:.4f}', best_val_loss_epoch + 1],
+                    ]
+                    
+                    ax3.table(cellText=table_data, loc='center', cellLoc='center')
+                    ax3.set_title('Training Metrics Summary')
+                    
+                    plt.tight_layout()
+                    plt.show()
+                    
+                    # Print current status
+                    print(f"Epoch {epoch+1} - "
+                          f"Train Loss: {self.train_losses[-1]:.4f}, Train Acc: {self.train_accs[-1]:.4f} - "
+                          f"Val Loss: {self.val_losses[-1]:.4f}, Val Acc: {self.val_accs[-1]:.4f}")
+                    
+                    if epoch > 0:
+                        if self.val_losses[-1] < self.val_losses[-2]:
+                            print(f"✅ Validation loss improved from {self.val_losses[-2]:.4f} to {self.val_losses[-1]:.4f}")
+                        else:
+                            print(f"⚠️ Validation loss did not improve from {self.val_losses[-2]:.4f}")
+            
+            # Add our custom callback
+            if callbacks is None:
+                callbacks = []
+            
+            display_callback = DisplayProgressCallback()
+            callbacks.append(display_callback)
+            
+        except Exception as e:
+            print(f"Could not initialize Colab visualization: {e}")
     
     # Create output directories
     os.makedirs(Config.output_dir, exist_ok=True)
