@@ -21,6 +21,9 @@ from os import path
 from datetime import datetime
 import torch
 
+# Import report generator
+from src.report_generator import ReportGenerator
+
 # Check if running in Google Colab
 IN_COLAB = 'google.colab' in str(globals())
 
@@ -494,6 +497,22 @@ def main():
         if not run_module("train_model"):
             print("Workflow stopped due to error in train_model.py")
             return
+    
+    # Generate final report
+    print_section_header("GENERATING FINAL REPORT")
+    try:
+        report_generator = ReportGenerator(PROJECT_ROOT)
+        report_path = os.path.join(PROJECT_ROOT, "model_report.html")
+        print(f"✅ Final report generated successfully")
+        print(f"📊 Report saved to: {report_path}")
+        
+        # Open the report in browser
+        if not IN_COLAB:
+            import webbrowser
+            print("Opening report in browser...")
+            webbrowser.open(f"file://{report_path}")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not generate final report: {str(e)}")
     
     # Workflow complete
     print_section_header("WORKFLOW COMPLETE")

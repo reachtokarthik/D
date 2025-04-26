@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embryo Quality Prediction - Model Report</title>
+    <style>
+        :root {
+            --primary-color: #4a6fa5;
+            --secondary-color: #6b8cbe;
+            --accent-color: #ff7e67;
+            --background-color: #f9f9f9;
+            --card-color: #ffffff;
+            --text-color: #333333;
+            --border-color: #e0e0e0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        h2 {
+            font-size: 1.8rem;
+            margin: 25px 0 15px;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            font-size: 1.4rem;
+            margin: 20px 0 10px;
+            color: var(--secondary-color);
+        }
+        
+        .card {
+            background-color: var(--card-color);
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .flex-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: space-between;
+        }
+        
+        .flex-item {
+            flex: 1 1 300px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        
+        table, th, td {
+            border: 1px solid var(--border-color);
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        
+        .metric-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f0f5ff;
+            margin: 10px 0;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .metric-label {
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+        
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: #777;
+            font-size: 0.9rem;
+        }
+        
+        .parameter-list {
+            list-style-type: none;
+        }
+        
+        .parameter-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--border-color);
+        }
+        
+        .parameter-name {
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+        
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Embryo Quality Prediction</h1>
+            <p>Model Training and Evaluation Report</p>
+            <p>Generated on: <span id="date"></span></p>
+        </header>
+        
+        <!-- Class Distribution Section -->
+        <section class="card">
+            <h2>1. Class Distribution</h2>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <h3>Sorted Class Counts</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Class</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Class A (Good Quality)</td>
+                                <td>250</td>
+                                <td>40%</td>
+                            </tr>
+                            <tr>
+                                <td>Class B (Fair Quality)</td>
+                                <td>180</td>
+                                <td>28.8%</td>
+                            </tr>
+                            <tr>
+                                <td>Class C (Poor Quality)</td>
+                                <td>195</td>
+                                <td>31.2%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex-item">
+                    <h3>Class Distribution Visualization</h3>
+                    <div class="chart-container">
+                        <img src="outputs/plots/class_distribution.png" alt="Class Distribution Chart">
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Normalization Details Section -->
+        <section class="card">
+            <h2>2. Normalization Details</h2>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <h3>Image Preprocessing</h3>
+                    <ul class="parameter-list">
+                        <li><span class="parameter-name">Rescaling:</span> 1/255 (pixel values normalized to [0,1])</li>
+                        <li><span class="parameter-name">Image Size:</span> 224 × 224 pixels</li>
+                        <li><span class="parameter-name">Color Channels:</span> 3 (RGB)</li>
+                        <li><span class="parameter-name">Mean:</span> [0.485, 0.456, 0.406] (ImageNet mean)</li>
+                        <li><span class="parameter-name">Standard Deviation:</span> [0.229, 0.224, 0.225] (ImageNet std)</li>
+                    </ul>
+                </div>
+                <div class="flex-item">
+                    <h3>Sample Images Before/After Normalization</h3>
+                    <div class="chart-container">
+                        <img src="outputs/plots/normalization_samples.png" alt="Normalization Samples">
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Dataset Split Section -->
+        <section class="card">
+            <h2>3. Dataset Split</h2>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <h3>Split Ratios</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dataset</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Training Set</td>
+                                <td>500</td>
+                                <td>80%</td>
+                            </tr>
+                            <tr>
+                                <td>Validation Set</td>
+                                <td>75</td>
+                                <td>12%</td>
+                            </tr>
+                            <tr>
+                                <td>Test Set</td>
+                                <td>50</td>
+                                <td>8%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex-item">
+                    <h3>Split Strategy</h3>
+                    <ul class="parameter-list">
+                        <li><span class="parameter-name">Splitting Method:</span> Stratified split (preserves class distribution)</li>
+                        <li><span class="parameter-name">Random Seed:</span> 42 (for reproducibility)</li>
+                        <li><span class="parameter-name">Shuffle:</span> True (data was shuffled before splitting)</li>
+                    </ul>
+                    <div class="chart-container">
+                        <img src="outputs/plots/split_distribution.png" alt="Split Distribution">
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Training Details Section -->
+        <section class="card">
+            <h2>4. Training Details</h2>
+            
+            <div class="flex-container">
+                <div class="flex-item">
+                    <h3>Model Architecture</h3>
+                    <ul class="parameter-list">
+                        <li><span class="parameter-name">Base Model:</span> EfficientNetB7</li>
+                        <li><span class="parameter-name">Pretrained:</span> ImageNet weights</li>
+                        <li><span class="parameter-name">Fine-tuned:</span> Yes (all layers)</li>
+                        <li><span class="parameter-name">Output Classes:</span> 3</li>
+                    </ul>
+                </div>
+                <div class="flex-item">
+                    <h3>Training Parameters</h3>
+                    <ul class="parameter-list">
+                        <li><span class="parameter-name">Optimizer:</span> AdamW</li>
+                        <li><span class="parameter-name">Learning Rate:</span> 1e-4</li>
+                        <li><span class="parameter-name">Batch Size:</span> 32</li>
+                        <li><span class="parameter-name">Epochs:</span> 30</li>
+                        <li><span class="parameter-name">Loss Function:</span> Categorical Cross-Entropy</li>
+                        <li><span class="parameter-name">Early Stopping:</span> Yes (patience = 7)</li>
+                        <li><span class="parameter-name">Learning Rate Scheduler:</span> ReduceLROnPlateau (factor = 0.1, patience = 3)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <h3>Data Augmentation</h3>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <ul class="parameter-list">
+                        <li><span class="parameter-name">Rotation Range:</span> 15°</li>
+                        <li><span class="parameter-name">Width Shift:</span> 0.1</li>
+                        <li><span class="parameter-name">Height Shift:</span> 0.1</li>
+                        <li><span class="parameter-name">Shear Range:</span> 0.1</li>
+                        <li><span class="parameter-name">Zoom Range:</span> 0.1</li>
+                        <li><span class="parameter-name">Horizontal Flip:</span> True</li>
+                        <li><span class="parameter-name">Vertical Flip:</span> True</li>
+                        <li><span class="parameter-name">Fill Mode:</span> Nearest</li>
+                    </ul>
+                </div>
+                <div class="flex-item">
+                    <div class="chart-container">
+                        <img src="outputs/plots/augmentation_samples.png" alt="Augmentation Samples">
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Training Progress</h3>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <div class="chart-container">
+                        <img src="outputs/plots/training_accuracy.png" alt="Training Accuracy">
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="chart-container">
+                        <img src="outputs/plots/training_loss.png" alt="Training Loss">
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Training Metrics</h3>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">95.8%</span>
+                        <span class="metric-label">Best Training Accuracy</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">92.6%</span>
+                        <span class="metric-label">Best Validation Accuracy</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">0.187</span>
+                        <span class="metric-label">Final Training Loss</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">0.243</span>
+                        <span class="metric-label">Final Validation Loss</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Evaluation Results Section -->
+        <section class="card">
+            <h2>5. Evaluation Results</h2>
+            
+            <h3>Test Set Performance</h3>
+            <div class="flex-container">
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">91.2%</span>
+                        <span class="metric-label">Test Accuracy</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">0.92</span>
+                        <span class="metric-label">Precision (Weighted)</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">0.91</span>
+                        <span class="metric-label">Recall (Weighted)</span>
+                    </div>
+                </div>
+                <div class="flex-item">
+                    <div class="metric-box">
+                        <span class="metric-value">0.91</span>
+                        <span class="metric-label">F1 Score (Weighted)</span>
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Confusion Matrix</h3>
+            <div class="chart-container">
+                <img src="outputs/plots/confusion_matrix.png" alt="Confusion Matrix">
+            </div>
+            
+            <h3>Per-Class Metrics</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Class</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1 Score</th>
+                        <th>Support</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Class A (Good Quality)</td>
+                        <td>0.94</td>
+                        <td>0.92</td>
+                        <td>0.93</td>
+                        <td>20</td>
+                    </tr>
+                    <tr>
+                        <td>Class B (Fair Quality)</td>
+                        <td>0.89</td>
+                        <td>0.88</td>
+                        <td>0.88</td>
+                        <td>15</td>
+                    </tr>
+                    <tr>
+                        <td>Class C (Poor Quality)</td>
+                        <td>0.90</td>
+                        <td>0.93</td>
+                        <td>0.91</td>
+                        <td>15</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <footer>
+            <p>Embryo Quality Prediction Model Report</p>
+            <p>© 2025 - Generated with Cascade AI</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Set current date
+        document.getElementById('date').textContent = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    </script>
+</body>
+</html>

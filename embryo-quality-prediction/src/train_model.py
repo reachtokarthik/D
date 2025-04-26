@@ -10,6 +10,9 @@ import os.path as path
 from datetime import datetime
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 
+# Import the report generator
+from src.report_generator import ReportGenerator
+
 print("Starting embryo quality prediction training script...")
 
 # PyTorch imports
@@ -96,6 +99,9 @@ def get_transforms():
 
 # Load datasets
 def load_datasets():
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
+    
     train_transform, val_test_transform = get_transforms()
     
     print("\nChecking for valid class directories...")
@@ -171,7 +177,7 @@ def load_datasets():
     val_loader = DataLoader(val_dataset, batch_size=Config.batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=Config.batch_size, shuffle=False, num_workers=4)
     
-    print(f"\nud83dudcca Dataset loaded:")
+    print(f"\n📊 Dataset loaded:")
     print(f"   - Number of classes: {Config.num_classes}")
     print(f"   - Class names: {Config.class_names}")
     print(f"   - Training samples: {len(train_dataset)}")
@@ -179,7 +185,7 @@ def load_datasets():
     print(f"   - Test samples: {len(test_dataset)}")
     
     # Print class distribution
-    print("\nud83dudcca Class distribution:")
+    print("\n📊 Class distribution:")
     class_counts = {}
     for dataset_name, dataset in [("Train", train_dataset), ("Validation", val_dataset), ("Test", test_dataset)]:
         counts = {Config.class_names[i]: 0 for i in range(Config.num_classes)}
@@ -190,6 +196,28 @@ def load_datasets():
         print(f"   - {dataset_name} set:")
         for class_name, count in counts.items():
             print(f"      - {class_name}: {count} samples ({count/len(dataset)*100:.1f}%)")
+    
+    # Update report with normalization details
+    norm_params = {
+        "rescaling": "1/255 (ToTensor)",
+        "image_size": f"{Config.img_size}x{Config.img_size}",
+        "mean": str(Config.mean),
+        "std": str(Config.std)
+    }
+    report_generator.update_normalization(norm_params)
+    
+    # Update report with class distribution
+    report_generator.update_class_distribution(class_counts["Train"])
+    
+    # Update report with split information
+    split_info = {
+        "train": len(train_dataset),
+        "validation": len(val_dataset),
+        "test": len(test_dataset),
+        "strategy": "Stratified split",
+        "seed": Config.seed
+    }
+    report_generator.update_split_info(split_info)
     
     return train_loader, val_loader, test_loader, class_counts
 
@@ -247,135 +275,195 @@ def get_model(model_name, num_classes, pretrained=True):
 
 # Training function
 def train_model(model, train_loader, val_loader, criterion, optimizer, scheduler, num_epochs):
-    # Create directories for saving results
-    os.makedirs(Config.output_dir, exist_ok=True)
-    os.makedirs(Config.plots_dir, exist_ok=True)
-    os.makedirs(Config.results_dir, exist_ok=True)
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
     
-    # Initialize variables
-    best_val_acc = 0.0
-    best_model_wts = None
+    device = Config.device
+    model = model.to(device)
+    
+    # Update report with training parameters
+    training_params = {
+        "model_name": Config.model_name,
+        "optimizer": Config.optimizer_name,
+        "learning_rate": Config.learning_rate,
+        "batch_size": Config.batch_size,
+        "epochs": Config.num_epochs,
+        "early_stopping_patience": Config.early_stopping_patience,
+        "lr_scheduler": f"ReduceLROnPlateau (patience={Config.scheduler_patience})",
+        "loss": "CrossEntropyLoss",
+        "pretrained": Config.pretrained,
+        "fine_tuned": True,
+        "num_classes": Config.num_classes,
+        "augmentation": {
+            "rotation_range": "15°",
+            "horizontal_flip": "True",
+            "vertical_flip": "True",
+            "color_jitter": "brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1"
+        }
+    }
+    report_generator.update_training_params(training_params)
+    
+    # Initialize lists to track metrics
     train_losses = []
     val_losses = []
     train_accs = []
     val_accs = []
-    early_stopping_counter = 0
+    
+    # For early stopping
+    best_val_loss = float('inf')
+    patience_counter = 0
+    best_model_state = None
     
     # Training loop
+    print("\n🏋️ Starting training...")
     start_time = time.time()
+    
     for epoch in range(num_epochs):
-        print(f"\nEpoch {epoch+1}/{num_epochs}")
-        print("-" * 10)
-        
         # Training phase
         model.train()
         running_loss = 0.0
-        running_corrects = 0
+        correct = 0
+        total = 0
         
         # Progress bar for training
-        train_pbar = tqdm(train_loader, desc=f"Training")
+        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]")
+        
         for inputs, labels in train_pbar:
-            inputs = inputs.to(Config.device)
-            labels = labels.to(Config.device)
+            inputs, labels = inputs.to(device), labels.to(device)
             
             # Zero the parameter gradients
             optimizer.zero_grad()
             
             # Forward pass
-            with torch.set_grad_enabled(True):
-                outputs = model(inputs)
-                _, preds = torch.max(outputs, 1)
-                loss = criterion(outputs, labels)
-                
-                # Backward pass and optimize
-                loss.backward()
-                optimizer.step()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
             
-            # Statistics
+            # Backward pass and optimize
+            loss.backward()
+            optimizer.step()
+            
+            # Track statistics
             running_loss += loss.item() * inputs.size(0)
-            running_corrects += torch.sum(preds == labels.data)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
             
             # Update progress bar
-            train_pbar.set_postfix({"loss": loss.item(), "accuracy": torch.sum(preds == labels.data).item() / inputs.size(0)})
+            train_pbar.set_postfix({
+                'loss': loss.item(),
+                'acc': 100 * correct / total
+            })
         
-        epoch_loss = running_loss / len(train_loader.dataset)
-        epoch_acc = running_corrects.double() / len(train_loader.dataset)
-        train_losses.append(epoch_loss)
-        train_accs.append(epoch_acc.item())
-        
-        print(f"Training Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}")
+        epoch_train_loss = running_loss / len(train_loader.dataset)
+        epoch_train_acc = correct / total
+        train_losses.append(epoch_train_loss)
+        train_accs.append(epoch_train_acc)
         
         # Validation phase
         model.eval()
         running_loss = 0.0
-        running_corrects = 0
+        correct = 0
+        total = 0
         
-        # Progress bar for validation
-        val_pbar = tqdm(val_loader, desc=f"Validation")
-        for inputs, labels in val_pbar:
-            inputs = inputs.to(Config.device)
-            labels = labels.to(Config.device)
+        # No gradients needed for validation
+        with torch.no_grad():
+            # Progress bar for validation
+            val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]")
             
-            # Forward pass
-            with torch.no_grad():
+            for inputs, labels in val_pbar:
+                inputs, labels = inputs.to(device), labels.to(device)
+                
+                # Forward pass
                 outputs = model(inputs)
-                _, preds = torch.max(outputs, 1)
                 loss = criterion(outputs, labels)
-            
-            # Statistics
-            running_loss += loss.item() * inputs.size(0)
-            running_corrects += torch.sum(preds == labels.data)
-            
-            # Update progress bar
-            val_pbar.set_postfix({"loss": loss.item(), "accuracy": torch.sum(preds == labels.data).item() / inputs.size(0)})
+                
+                # Track statistics
+                running_loss += loss.item() * inputs.size(0)
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+                
+                # Update progress bar
+                val_pbar.set_postfix({
+                    'loss': loss.item(),
+                    'acc': 100 * correct / total
+                })
         
-        epoch_loss = running_loss / len(val_loader.dataset)
-        epoch_acc = running_corrects.double() / len(val_loader.dataset)
-        val_losses.append(epoch_loss)
-        val_accs.append(epoch_acc.item())
+        epoch_val_loss = running_loss / len(val_loader.dataset)
+        epoch_val_acc = correct / total
+        val_losses.append(epoch_val_loss)
+        val_accs.append(epoch_val_acc)
         
-        print(f"Validation Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}")
+        # Print epoch summary
+        print(f"Epoch {epoch+1}/{num_epochs} - "
+              f"Train Loss: {epoch_train_loss:.4f}, Train Acc: {epoch_train_acc:.4f} - "
+              f"Val Loss: {epoch_val_loss:.4f}, Val Acc: {epoch_val_acc:.4f}")
         
-        # Update learning rate scheduler
-        scheduler.step(epoch_loss)
+        # Learning rate scheduler step
+        if scheduler:
+            if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                scheduler.step(epoch_val_loss)
+            else:
+                scheduler.step()
         
-        # Save the best model
-        if epoch_acc > best_val_acc:
-            best_val_acc = epoch_acc
-            best_model_wts = model.state_dict().copy()
-            early_stopping_counter = 0
-            
-            # Save the best model
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_acc': best_val_acc,
-                'class_names': Config.class_names
-            }, os.path.join(Config.output_dir, f"{Config.model_name}_best.pth"))
-            
-            print(f"\u2705 Saved new best model with validation accuracy: {best_val_acc:.4f}")
+        # Early stopping check
+        if epoch_val_loss < best_val_loss:
+            best_val_loss = epoch_val_loss
+            best_model_state = model.state_dict().copy()
+            patience_counter = 0
+            print(f"\u2728 New best validation loss: {best_val_loss:.4f}")
         else:
-            early_stopping_counter += 1
-            print(f"\u23f3 Early stopping counter: {early_stopping_counter}/{Config.early_stopping_patience}")
-        
-        # Early stopping
-        if early_stopping_counter >= Config.early_stopping_patience:
-            print(f"\u26d4 Early stopping triggered after {epoch+1} epochs")
-            break
+            patience_counter += 1
+            print(f"Early stopping patience: {patience_counter}/{Config.early_stopping_patience}")
+            
+            if patience_counter >= Config.early_stopping_patience:
+                print(f"\n⛔ Early stopping triggered after {epoch+1} epochs")
+                break
     
-    # Calculate training time
-    time_elapsed = time.time() - start_time
-    print(f"\nTraining complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
-    print(f"Best validation accuracy: {best_val_acc:.4f}")
+    # Training complete
+    training_time = time.time() - start_time
+    print(f"\n✅ Training completed in {training_time:.2f} seconds")
     
-    # Load best model weights
-    model.load_state_dict(best_model_wts)
+    # Load best model state
+    if best_model_state:
+        model.load_state_dict(best_model_state)
+        print("Loaded best model state from validation")
     
-    # Plot training and validation loss/accuracy
-    plot_training_results(train_losses, val_losses, train_accs, val_accs)
+    # Save the model
+    os.makedirs(Config.output_dir, exist_ok=True)
+    model_path = os.path.join(Config.output_dir, f"{Config.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pth")
+    torch.save({
+        'model_name': Config.model_name,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'num_classes': Config.num_classes,
+        'class_names': Config.class_names,
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'train_accs': train_accs,
+        'val_accs': val_accs
+    }, model_path)
+    print(f"Model saved to {model_path}")
     
-    return model
+    # Update report with training metrics
+    training_metrics = {
+        "best_train_acc": max(train_accs),
+        "best_val_acc": max(val_accs),
+        "final_train_loss": train_losses[-1],
+        "final_val_loss": val_losses[-1]
+    }
+    
+    # Create history dict for plotting
+    history = {
+        "accuracy": train_accs,
+        "val_accuracy": val_accs,
+        "loss": train_losses,
+        "val_loss": val_losses
+    }
+    
+    report_generator.update_training_metrics(training_metrics, history)
+    
+    return model, train_losses, val_losses, train_accs, val_accs
 
 # Plot training results
 def plot_training_results(train_losses, val_losses, train_accs, val_accs):
@@ -408,66 +496,107 @@ def plot_training_results(train_losses, val_losses, train_accs, val_accs):
 
 # Evaluate model on test set
 def evaluate_model(model, test_loader):
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
+    
+    device = Config.device
+    model = model.to(device)
     model.eval()
+    
+    # Initialize variables
+    running_corrects = 0
     all_preds = []
     all_labels = []
     
-    # Collect predictions
+    # No gradients needed for evaluation
     with torch.no_grad():
         for inputs, labels in tqdm(test_loader, desc="Evaluating"):
-            inputs = inputs.to(Config.device)
-            labels = labels.to(Config.device)
+            inputs = inputs.to(device)
+            labels = labels.to(device)
             
+            # Forward pass
             outputs = model(inputs)
             _, preds = torch.max(outputs, 1)
             
+            # Statistics
+            running_corrects += torch.sum(preds == labels.data)
+            
+            # Store predictions and labels for metrics
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
     
-    # Calculate metrics
-    accuracy = accuracy_score(all_labels, all_preds)
-    precision = precision_score(all_labels, all_preds, average='weighted', zero_division=0)
-    recall = recall_score(all_labels, all_preds, average='weighted', zero_division=0)
-    f1 = f1_score(all_labels, all_preds, average='weighted', zero_division=0)
+    # Calculate accuracy
+    accuracy = running_corrects.double() / len(test_loader.dataset)
+    print(f"\n📈 Test Accuracy: {accuracy:.4f}")
     
-    # Print metrics
-    print(f"\nud83dudcca Test Set Evaluation:")
-    print(f"   - Accuracy: {accuracy:.4f}")
-    print(f"   - Precision: {precision:.4f}")
-    print(f"   - Recall: {recall:.4f}")
-    print(f"   - F1 Score: {f1:.4f}")
+    # Calculate confusion matrix
+    cm = confusion_matrix(all_labels, all_preds)
     
     # Generate classification report
-    class_report = classification_report(all_labels, all_preds, target_names=Config.class_names, zero_division=0)
-    print("\nClassification Report:")
-    print(class_report)
+    print("\n📋 Classification Report:")
+    report = classification_report(all_labels, all_preds, target_names=Config.class_names, output_dict=True)
+    print(classification_report(all_labels, all_preds, target_names=Config.class_names))
     
-    # Generate confusion matrix
-    cm = confusion_matrix(all_labels, all_preds)
-    plot_confusion_matrix(cm, Config.class_names)
+    # Calculate precision, recall, and f1 score (weighted)
+    precision = report['weighted avg']['precision']
+    recall = report['weighted avg']['recall']
+    f1 = report['weighted avg']['f1-score']
+    
+    # Print additional metrics
+    print(f"📈 Precision (weighted): {precision:.4f}")
+    print(f"📈 Recall (weighted): {recall:.4f}")
+    print(f"📈 F1 Score (weighted): {f1:.4f}")
+    
+    # Plot confusion matrix
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=Config.class_names, yticklabels=Config.class_names)
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    
+    # Save confusion matrix plot
+    os.makedirs(Config.plots_dir, exist_ok=True)
+    cm_path = os.path.join(Config.plots_dir, 'confusion_matrix.png')
+    plt.savefig(cm_path)
+    plt.close()
+    print(f"Confusion matrix saved to {cm_path}")
     
     # Save results to CSV
     results = {
         'model_name': Config.model_name,
-        'accuracy': accuracy,
+        'accuracy': accuracy.item(),
         'precision': precision,
         'recall': recall,
         'f1_score': f1,
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
-    # Create or append to results CSV
-    results_file = os.path.join(Config.results_dir, "model_results.csv")
-    if os.path.exists(results_file):
-        results_df = pd.read_csv(results_file)
-        results_df = pd.concat([results_df, pd.DataFrame([results])], ignore_index=True)
-    else:
-        results_df = pd.DataFrame([results])
+    # Add per-class metrics
+    for i, class_name in enumerate(Config.class_names):
+        results[f"{class_name}_precision"] = report[class_name]['precision']
+        results[f"{class_name}_recall"] = report[class_name]['recall']
+        results[f"{class_name}_f1"] = report[class_name]['f1-score']
     
-    results_df.to_csv(results_file, index=False)
-    print(f"\nResults saved to {results_file}")
+    # Save results to CSV
+    results_df = pd.DataFrame([results])
+    os.makedirs(Config.results_dir, exist_ok=True)
+    results_path = os.path.join(Config.results_dir, f"{Config.model_name}_results.csv")
+    results_df.to_csv(results_path, index=False)
+    print(f"Results saved to {results_path}")
     
-    return accuracy, precision, recall, f1, cm
+    # Update report with evaluation metrics
+    evaluation_metrics = {
+        "test_accuracy": accuracy.item(),
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1,
+        "class_metrics": report
+    }
+    report_generator.update_evaluation_metrics(evaluation_metrics, cm, Config.class_names)
+    
+    return accuracy.item(), cm, report
 
 # Plot confusion matrix
 def plot_confusion_matrix(cm, class_names):

@@ -14,6 +14,9 @@ from datetime import datetime
 import os.path as path
 import pandas as pd
 
+# Import the report generator
+from src.report_generator import ReportGenerator
+
 # Get the absolute path to the project root directory
 SCRIPT_DIR = path.dirname(path.abspath(__file__))
 PROJECT_ROOT = path.dirname(SCRIPT_DIR)
@@ -53,6 +56,9 @@ def set_seed(seed):
 
 # Create data generators
 def create_data_generators():
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
+    
     # Data augmentation for training
     train_datagen = ImageDataGenerator(
         rescale=1./255,
@@ -102,6 +108,35 @@ def create_data_generators():
     print(f"   - Validation samples: {validation_generator.samples}")
     print(f"   - Test samples: {test_generator.samples}")
     
+    # Update report with class distribution
+    class_counts = {}
+    for class_name, idx in train_generator.class_indices.items():
+        # Count samples in each class
+        class_count = len([1 for _, label in train_generator.filenames if label == idx])
+        class_counts[class_name] = class_count
+    
+    # Update normalization details in report
+    norm_params = {
+        "rescaling": "1/255",
+        "image_size": f"{Config.img_size[0]}x{Config.img_size[1]}",
+        "mean": "ImageNet mean",
+        "std": "ImageNet std"
+    }
+    report_generator.update_normalization(norm_params)
+    
+    # Update class distribution in report
+    report_generator.update_class_distribution(class_counts)
+    
+    # Update split information in report
+    split_info = {
+        "train": train_generator.samples,
+        "validation": validation_generator.samples,
+        "test": test_generator.samples,
+        "strategy": "Stratified split",
+        "seed": Config.seed
+    }
+    report_generator.update_split_info(split_info)
+    
     return train_generator, validation_generator, test_generator
 
 # Build model
@@ -134,6 +169,9 @@ def build_model(model_name, num_classes):
 
 # Train model
 def train_model(model, train_generator, validation_generator, base_model=None):
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
+    
     # Create output directories
     os.makedirs(Config.output_dir, exist_ok=True)
     os.makedirs(Config.plots_dir, exist_ok=True)
@@ -157,6 +195,32 @@ def train_model(model, train_generator, validation_generator, base_model=None):
         loss='categorical_crossentropy',
         metrics=['accuracy']
     )
+    
+    # Update report with training parameters
+    training_params = {
+        "model_name": Config.model_name,
+        "optimizer": "AdamW",
+        "learning_rate": Config.learning_rate,
+        "batch_size": Config.batch_size,
+        "epochs": Config.epochs,
+        "early_stopping_patience": Config.early_stopping_patience,
+        "lr_scheduler": "ReduceLROnPlateau (factor=0.1, patience=3)",
+        "loss": "categorical_crossentropy",
+        "pretrained": True,
+        "fine_tuned": True if base_model else False,
+        "num_classes": len(train_generator.class_indices),
+        "augmentation": {
+            "rotation_range": "15°",
+            "width_shift": "0.1",
+            "height_shift": "0.1",
+            "shear_range": "0.1",
+            "zoom_range": "0.1",
+            "horizontal_flip": "True",
+            "vertical_flip": "True",
+            "fill_mode": "nearest"
+        }
+    }
+    report_generator.update_training_params(training_params)
     
     print("\n🔍 Model summary:")
     model.summary()
@@ -202,14 +266,33 @@ def train_model(model, train_generator, validation_generator, base_model=None):
         
         # Combine histories
         history = {}
-        for k in history1.history.keys():
-            history[k] = history1.history[k] + history2.history[k]
+        for key in history1.history.keys():
+            history[key] = history1.history[key] + history2.history[key]
     else:
-        # If no base model provided, just use the first history
-        history = history1.history
+        # Train for full epochs
+        history = model.fit(
+            train_generator,
+            steps_per_epoch=train_generator.samples // Config.batch_size,
+            validation_data=validation_generator,
+            validation_steps=validation_generator.samples // Config.batch_size,
+            epochs=Config.epochs,
+            callbacks=callbacks,
+            verbose=1
+        ).history
     
-    # Plot training history
-    plot_training_history(history)
+    # Save the final model
+    final_model_path = os.path.join(Config.output_dir, f"{Config.model_name}_final.h5")
+    model.save(final_model_path)
+    print(f"\n💾 Model saved to {final_model_path}")
+    
+    # Update report with training metrics
+    training_metrics = {
+        "best_train_acc": max(history['accuracy']),
+        "best_val_acc": max(history['val_accuracy']),
+        "final_train_loss": history['loss'][-1],
+        "final_val_loss": history['val_loss'][-1]
+    }
+    report_generator.update_training_metrics(training_metrics, history)
     
     return model, history
 
@@ -244,51 +327,89 @@ def plot_training_history(history):
 
 # Evaluate model
 def evaluate_model(model, test_generator):
+    # Initialize report generator
+    report_generator = ReportGenerator(PROJECT_ROOT)
+    
     # Get predictions
-    predictions = model.predict(test_generator, verbose=1)
-    y_pred = np.argmax(predictions, axis=1)
+    print("\n📊 Evaluating model on test set...")
+    y_pred_prob = model.predict(test_generator)
+    y_pred = np.argmax(y_pred_prob, axis=1)
+    
+    # Get true labels
     y_true = test_generator.classes
     
     # Calculate metrics
-    class_names = list(test_generator.class_indices.keys())
+    accuracy = np.mean(y_pred == y_true)
     cm = confusion_matrix(y_true, y_pred)
-    report = classification_report(y_true, y_pred, target_names=class_names, output_dict=True)
+    class_names = list(test_generator.class_indices.keys())
     
-    # Print classification report
-    print("\n📊 Classification Report:")
-    print(classification_report(y_true, y_pred, target_names=class_names))
+    # Calculate precision, recall, and f1 score (weighted)
+    report_dict = classification_report(y_true, y_pred, target_names=class_names, output_dict=True)
+    precision = report_dict['weighted avg']['precision']
+    recall = report_dict['weighted avg']['recall']
+    f1 = report_dict['weighted avg']['f1-score']
+    
+    # Print evaluation results
+    print(f"\n📈 Test Accuracy: {accuracy:.4f}")
+    print(f"📈 Precision (weighted): {precision:.4f}")
+    print(f"📈 Recall (weighted): {recall:.4f}")
+    print(f"📈 F1 Score (weighted): {f1:.4f}")
     
     # Plot confusion matrix
     plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=class_names, yticklabels=class_names)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=class_names, yticklabels=class_names)
     plt.title('Confusion Matrix')
-    
-    # Save confusion matrix
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig(os.path.join(Config.plots_dir, f"{Config.model_name}_confusion_matrix_{timestamp}.png"))
-    plt.close()
     
-    # Save results to CSV
+    # Save confusion matrix plot
+    cm_path = os.path.join(Config.plots_dir, 'confusion_matrix.png')
+    plt.savefig(cm_path)
+    plt.close()
+    print(f"Confusion matrix saved to {cm_path}")
+    
+    # Generate classification report
+    report = classification_report(y_true, y_pred, target_names=class_names, output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
+    
+    # Save classification report
+    report_path = os.path.join(Config.results_dir, 'classification_report.csv')
+    report_df.to_csv(report_path)
+    print(f"Classification report saved to {report_path}")
+    
+    # Print classification report
+    print("\n📋 Classification Report:")
+    print(classification_report(y_true, y_pred, target_names=class_names))
+    
+    # Create results dictionary for saving
     results = {
         'model_name': Config.model_name,
-        'accuracy': report['accuracy'],
-        'macro_avg_precision': report['macro avg']['precision'],
-        'macro_avg_recall': report['macro avg']['recall'],
-        'macro_avg_f1': report['macro avg']['f1-score'],
-        'weighted_avg_precision': report['weighted avg']['precision'],
-        'weighted_avg_recall': report['weighted avg']['recall'],
-        'weighted_avg_f1': report['weighted avg']['f1-score'],
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
     # Add per-class metrics
     for class_name in class_names:
-        results[f"{class_name}_precision"] = report[class_name]['precision']
-        results[f"{class_name}_recall"] = report[class_name]['recall']
-        results[f"{class_name}_f1"] = report[class_name]['f1-score']
+        results[f"{class_name}_precision"] = report_dict[class_name]['precision']
+        results[f"{class_name}_recall"] = report_dict[class_name]['recall']
+        results[f"{class_name}_f1"] = report_dict[class_name]['f1-score']
+    
+    # Update report with evaluation metrics
+    evaluation_metrics = {
+        "test_accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1,
+        "class_metrics": report_dict
+    }
+    report_generator.update_evaluation_metrics(evaluation_metrics, cm, class_names)
+    
+    return accuracy, cm, report_dict
     
     # Create or append to results CSV
     results_file = os.path.join(Config.results_dir, "model_results.csv")
