@@ -733,6 +733,28 @@ def evaluate_model(model, test_loader):
     }
     report_generator.update_evaluation_metrics(evaluation_metrics, cm, Config.class_names)
     
+    # Finalize the HTML report
+    print("\n📊 Finalizing HTML report...")
+    report_path = os.path.join(PROJECT_ROOT, "model_report.html")
+    print(f"\n✅ HTML report finalized and available at: {report_path}")
+    
+    # Open the report in browser if not in Colab
+    if not 'google.colab' in str(globals()):
+        try:
+            import webbrowser
+            print("Opening report in browser...")
+            webbrowser.open(f"file://{report_path}")
+        except Exception as e:
+            print(f"Could not open report in browser: {e}")
+    else:
+        # For Colab, provide instructions to view the report
+        print("\nTo view the report in Colab:")
+        print("1. In the file browser (left sidebar), find and download 'model_report.html'")
+        print("2. Or use the following code to display it in the notebook:")
+        print("   from IPython.display import HTML, display")
+        print("   with open('model_report.html', 'r') as f:")
+        print("       display(HTML(f.read()))")
+    
     return accuracy.item(), cm, report
 
 # Plot confusion matrix
