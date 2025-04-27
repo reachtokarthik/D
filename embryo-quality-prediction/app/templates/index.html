@@ -109,24 +109,31 @@
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
+                                <h5>Evaluation Dashboard</h5>
+                                <p>View comprehensive model evaluation results</p>
+                                <a href="{{ url_for('dashboard') }}" class="btn btn-primary" onclick="showSpinner('Loading dashboard...')">
+                                    <i class="bi bi-speedometer2"></i> View Dashboard
+                                </a>
+                            </div>
+                            <div class="col-md-3">
                                 <h5>Evaluate Latest Model</h5>
                                 <p>Run evaluation on the most recently trained model</p>
                                 <form action="{{ url_for('evaluate_model') }}" method="post">
                                     <input type="hidden" name="model_path" value="{{ models[0].path if models else '' }}">
-                                    <button type="submit" class="btn btn-primary" {% if not models %}disabled{% endif %} onclick="showSpinner('Evaluating model... This may take a few minutes.')">
+                                    <button type="submit" class="btn btn-outline-primary" {% if not models %}disabled{% endif %} onclick="showSpinner('Evaluating model... This may take a few minutes.')">
                                         <i class="bi bi-play-fill"></i> Evaluate Latest Model
                                     </button>
                                 </form>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <h5>Compare Models</h5>
                                 <p>Compare performance metrics across multiple models</p>
                                 <a href="{{ url_for('compare_models') }}" class="btn btn-outline-primary" onclick="showSpinner('Loading model comparison...')">
                                     <i class="bi bi-bar-chart-line"></i> Compare Models
                                 </a>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <h5>Validate Embryo Images</h5>
                                 <p>Test model on individual embryo images</p>
                                 <a href="{{ url_for('validate_image') }}" class="btn btn-outline-success" onclick="showSpinner('Loading image validation tool...')">

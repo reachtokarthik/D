@@ -5,6 +5,7 @@ import glob
 import pandas as pd
 import uuid
 import base64
+import numpy as np
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory
 from datetime import datetime
@@ -95,6 +96,119 @@ def index():
                           history=history)
 
 
+@app.route('/dashboard')
+def dashboard():
+    """Advanced dashboard showing comprehensive model evaluation results."""
+    AppConfig.ensure_dirs()
+    
+    # Get list of available models
+    models = []
+    for model_file in glob.glob(os.path.join(AppConfig.MODELS_DIR, "*.pth")):
+        model_name = os.path.basename(model_file)
+        models.append({
+            'name': model_name,
+            'path': model_file,
+            'modified': datetime.fromtimestamp(os.path.getmtime(model_file)).strftime('%Y-%m-%d %H:%M:%S')
+        })
+    
+    # Sort models by modification time (newest first)
+    models.sort(key=lambda x: x['modified'], reverse=True)
+    
+    # Load model results from individual CSV files
+    model_data = []
+    model_names = []
+    accuracy_data = []
+    precision_data = []
+    recall_data = []
+    f1_data = []
+    
+    # First, check if we have individual model result files
+    result_files = glob.glob(os.path.join(AppConfig.RESULTS_DIR, "*_results.csv"))
+    
+    if result_files:
+        # Process individual model result files
+        for result_file in result_files:
+            try:
+                df = pd.read_csv(result_file)
+                if not df.empty:
+                    model_data.append(df.iloc[0].to_dict())
+                    model_name = df.iloc[0]['model_name']
+                    model_names.append(model_name)
+                    accuracy_data.append(float(df.iloc[0]['accuracy']))
+                    precision_data.append(float(df.iloc[0]['precision']))
+                    recall_data.append(float(df.iloc[0]['recall']))
+                    f1_data.append(float(df.iloc[0]['f1_score']))
+            except Exception as e:
+                print(f"Error loading {result_file}: {e}")
+    else:
+        # Fall back to model_evaluations.csv
+        csv_file = os.path.join(AppConfig.RESULTS_DIR, "model_evaluations.csv")
+        if os.path.exists(csv_file):
+            try:
+                df = pd.read_csv(csv_file)
+                if not df.empty:
+                    # Group by model_name and take the latest evaluation for each model
+                    df = df.sort_values('timestamp', ascending=False)
+                    df = df.drop_duplicates(subset=['model_name'])
+                    
+                    model_data = df.to_dict('records')
+                    model_names = df['model_name'].tolist()
+                    accuracy_data = df['accuracy'].tolist()
+                    precision_data = df['precision'].tolist()
+                    recall_data = df['recall'].tolist()
+                    f1_data = df['f1_score'].tolist()
+            except Exception as e:
+                flash(f"Error loading evaluation history: {e}", "danger")
+    
+    # Sort model data by accuracy (descending)
+    if model_data:
+        sorted_indices = np.argsort([-m['accuracy'] for m in model_data])
+        model_data = [model_data[i] for i in sorted_indices]
+        model_names = [model_names[i] for i in sorted_indices]
+        accuracy_data = [accuracy_data[i] for i in sorted_indices]
+        precision_data = [precision_data[i] for i in sorted_indices]
+        recall_data = [recall_data[i] for i in sorted_indices]
+        f1_data = [f1_data[i] for i in sorted_indices]
+    
+    # Extract class names and prepare class-wise F1 data
+    class_names = []
+    class_f1_keys = []
+    class_f1_data = []
+    
+    if model_data:
+        # Extract class names from the first model's data
+        for key in model_data[0].keys():
+            if key.endswith('_f1') and not key == 'f1_score':
+                class_name = key.replace('_f1', '')
+                class_names.append(class_name)
+                class_f1_keys.append(key)
+        
+        # If we didn't find class-specific F1 scores, try the format from model_evaluations.csv
+        if not class_names:
+            for key in model_data[0].keys():
+                if key.startswith('f1_') and not key == 'f1_score':
+                    class_name = key.replace('f1_', '')
+                    class_names.append(class_name)
+                    class_f1_keys.append(key)
+        
+        # Prepare class-wise F1 data for charts
+        for i, class_key in enumerate(class_f1_keys):
+            class_f1_values = [float(m[class_key]) for m in model_data]
+            class_f1_data.append(class_f1_values)
+    
+    return render_template('dashboard.html',
+                          models=models,
+                          model_data=model_data,
+                          model_names=model_names,
+                          accuracy_data=accuracy_data,
+                          precision_data=precision_data,
+                          recall_data=recall_data,
+                          f1_data=f1_data,
+                          class_names=class_names,
+                          class_f1_keys=class_f1_keys,
+                          class_f1_data=class_f1_data)
+
+
 @app.route('/evaluate', methods=['POST'])
 def evaluate_model():
     """Evaluate a model and generate a report."""
@@ -120,8 +234,8 @@ def evaluate_model():
         
         flash(f"Model evaluated successfully. Report generated at {os.path.basename(report_path)}", "success")
         
-        # Redirect to the report
-        return redirect(url_for('view_report', report_path=os.path.basename(report_path)))
+        # Redirect to the dashboard
+        return redirect(url_for('dashboard'))
     
     except Exception as e:
         flash(f"Error evaluating model: {e}", "danger")
@@ -216,24 +330,63 @@ def compare_models():
 @app.route('/api/model_metrics')
 def api_model_metrics():
     """API endpoint to get model metrics for charts."""
-    csv_file = os.path.join(AppConfig.RESULTS_DIR, "model_evaluations.csv")
+    # First try to load from individual model result files
+    result_files = glob.glob(os.path.join(AppConfig.RESULTS_DIR, "*_results.csv"))
     
+    if result_files:
+        try:
+            # Combine all result files
+            dfs = []
+            for file in result_files:
+                df = pd.read_csv(file)
+                if not df.empty:
+                    dfs.append(df)
+            
+            if dfs:
+                combined_df = pd.concat(dfs, ignore_index=True)
+                
+                # Convert timestamps to datetime for sorting
+                combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+                
+                # Sort by timestamp
+                combined_df = combined_df.sort_values('timestamp')
+                
+                # Prepare data for charts
+                data = {
+                    'timestamps': combined_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(),
+                    'models': combined_df['model_name'].tolist(),
+                    'accuracy': combined_df['accuracy'].tolist(),
+                    'precision': combined_df['precision'].tolist(),
+                    'recall': combined_df['recall'].tolist(),
+                    'f1_score': combined_df['f1_score'].tolist()
+                }
+                
+                return jsonify(data)
+        except Exception as e:
+            print(f"Error processing individual result files: {e}")
+    
+    # Fall back to model_evaluations.csv
+    csv_file = os.path.join(AppConfig.RESULTS_DIR, "model_evaluations.csv")
     if not os.path.exists(csv_file):
-        return jsonify({'error': 'No evaluation history found'})
+        return jsonify({'error': 'No evaluation data found'})
     
     try:
-        history = pd.read_csv(csv_file)
+        df = pd.read_csv(csv_file)
+        
+        # Convert timestamps to datetime for sorting
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
         # Sort by timestamp
-        history = history.sort_values('timestamp')
+        df = df.sort_values('timestamp')
         
         # Prepare data for charts
         data = {
-            'labels': history['model_name'].tolist(),
-            'timestamps': history['timestamp'].tolist(),
-            'accuracy': history['accuracy'].tolist(),
-            'precision': history['precision'].tolist(),
-            'recall': history['recall'].tolist(),
-            'f1_score': history['f1_score'].tolist(),
+            'timestamps': df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S').tolist(),
+            'models': df['model_name'].tolist(),
+            'accuracy': df['accuracy'].tolist(),
+            'precision': df['precision'].tolist(),
+            'recall': df['recall'].tolist(),
+            'f1_score': df['f1_score'].tolist()
         }
         
         return jsonify(data)
