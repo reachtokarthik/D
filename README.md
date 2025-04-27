@@ -33,7 +33,8 @@ embryo-quality-prediction/
 │   ├── split_dataset.py  # Dataset splitting
 │   ├── train_model.py    # PyTorch model training
 │   ├── evaluate_model.py # Model evaluation script
-│   └── predict_image.py  # Single image prediction
+│   ├── predict_image.py  # Single image prediction
+│   └── xai_utils.py      # Explainable AI utilities
 ├── uploads/              # Temporary storage for uploaded images
 ├── check_gpu.py          # GPU availability check
 ├── evaluate_and_visualize.py # Evaluation dashboard launcher
@@ -55,6 +56,7 @@ The project implements a complete embryo classification workflow in the followin
 8. **Model Evaluation**: Comprehensive evaluation with metrics and visualizations
 9. **Interactive Dashboard**: Web interface for exploring model performance
 10. **Single Image Validation**: Tool for validating individual embryo images
+11. **Explainable AI (XAI)**: Visualization tools to understand model decisions
 
 ## Embryo Classification Classes
 
@@ -177,6 +179,7 @@ The system includes a tool for validating individual embryo images:
 - Select a trained model for prediction
 - Get immediate results with class prediction and confidence scores
 - View detailed class probabilities with visualizations
+- Explore model decision-making with Grad-CAM heatmap visualizations
 
 The validation tool is accessible through the main dashboard or directly at `/validate` when the Flask app is running.
 

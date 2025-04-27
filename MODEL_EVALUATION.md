@@ -16,6 +16,7 @@ The model evaluation system consists of:
 - **Interactive Dashboard**: View evaluation results in a user-friendly web interface
 - **Model Comparison**: Compare multiple models side-by-side with radar charts and metrics tables
 - **Visualizations**: Charts and graphs for easy interpretation of results
+- **Explainable AI (XAI)**: Grad-CAM visualizations to understand model decisions
 - **Exportable Reports**: HTML reports that can be saved and shared
 - **Single-Image Validation**: Upload and validate individual embryo images with detailed results
 - **User Experience Enhancements**: Loading spinners, responsive design, and intuitive navigation
@@ -101,6 +102,7 @@ python evaluate_and_visualize.py --evaluate_only
   - Class probability distribution (chart and table)
   - Interpretation based on confidence level
   - Technical details of the prediction
+  - Grad-CAM heatmap visualization highlighting regions that influenced the prediction
 
 ## Programmatic Usage
 
@@ -131,6 +133,15 @@ print(f"Report generated at: {html_path}")
 - **Recall**: Ratio of true positives to all actual positives (measures false negative rate)
 - **F1 Score**: Harmonic mean of precision and recall (balanced measure)
 - **AUC**: Area Under the ROC Curve (discrimination ability)
+
+### Grad-CAM Visualizations
+
+Gradient-weighted Class Activation Mapping (Grad-CAM) provides visual explanations of model decisions by highlighting regions in the image that most influenced the prediction:
+
+- **Red/Yellow Areas**: Regions that strongly influenced the model's decision for the predicted class
+- **Blue/Green Areas**: Regions with less influence on the prediction
+- **Interpretation**: Focus on where the model is looking to understand if it's using relevant embryo features
+- **Clinical Value**: Helps verify if the model is focusing on biologically relevant structures
 
 ### Confusion Matrix
 
@@ -195,7 +206,15 @@ If you encounter issues, check:
 - **Error Handling**: Better error messages and validation
 
 ### Functionality Improvements
+- **Explainable AI Integration**: Added Grad-CAM visualizations for model interpretability
 - **Image Validation Tool**: New feature for validating individual embryo images
 - **Model Comparison**: Enhanced visualization with radar charts
 - **Dashboard Navigation**: Streamlined user experience
 - **Performance Optimization**: Faster page loading and response times
+
+### XAI Implementation
+- **Grad-CAM Algorithm**: Implemented for CNN model visualization
+- **Heatmap Generation**: Real-time generation of attention heatmaps
+- **Batch Processing**: Support for processing multiple images
+- **Integration with Validation**: Seamless integration with the image validation workflow
+- **Combined Visualizations**: Side-by-side display of original images and heatmaps

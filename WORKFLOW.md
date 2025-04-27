@@ -175,6 +175,17 @@ In interactive mode, you'll be prompted to select which dataset(s) to use. In au
   - Displays results with visualizations through the web interface
   - Accessible via the `/validate` endpoint in the web application
 
+#### Step 11: Explainable AI Visualization (`xai_utils.py`)
+- **Purpose**: Provides visual explanations of model decisions using Grad-CAM
+- **Input**: Trained model and input image
+- **Output**: Heatmap visualizations highlighting regions influencing predictions
+- **Process**:
+  - Implements Gradient-weighted Class Activation Mapping (Grad-CAM)
+  - Identifies regions in the image that most influenced the model's decision
+  - Generates heatmap overlays on original images
+  - Supports both single image and batch visualization
+  - Integrated with the validation tool for real-time explainability
+
 ## Model Output Expectations
 
 ### Strengths of the Model
@@ -199,7 +210,7 @@ In interactive mode, you'll be prompted to select which dataset(s) to use. In au
 
 4. **Limited Generalization**: The model may not generalize well to images from different clinics or imaging systems with different protocols if they weren't represented in the training data.
 
-5. **Black Box Nature**: As with most deep learning models, the decision-making process is not easily interpretable, which can be a limitation in clinical settings where explainability is important.
+5. **Interpretability Challenges**: While the new Grad-CAM visualization helps with model explainability, the underlying deep learning model still has inherent interpretability limitations that should be considered in clinical settings.
 
 ## Expected Evaluation Metrics
 
@@ -291,6 +302,7 @@ The interactive evaluation dashboard provides a comprehensive interface for mode
    - Select a model for prediction
    - View detailed results including class probabilities
    - Results include confidence level and interpretation
+   - Visualize model decision-making with Grad-CAM heatmaps
 
 ## Conclusion
 
