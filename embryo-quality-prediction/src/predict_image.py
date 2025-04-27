@@ -200,8 +200,46 @@ class EmbryoPredictor:
             
             # Ensure class_names is properly initialized and has the right length
             if class_names is None or len(class_names) != num_classes:
-                class_names = [f"Class_{i}" for i in range(num_classes)]
-                print(f"Adjusted class names to match {num_classes} classes")
+                # Try to load class names from the dataset directory
+                try:
+                    # Get the class names from the test directory
+                    test_dir = os.path.join(PROJECT_ROOT, "data", "test")
+                    if os.path.exists(test_dir):
+                        # Get class names from subdirectory names
+                        actual_class_names = [d for d in os.listdir(test_dir) if os.path.isdir(os.path.join(test_dir, d))]
+                        if len(actual_class_names) == num_classes:
+                            class_names = actual_class_names
+                            print(f"Loaded actual class names from test directory: {class_names}")
+                        else:
+                            print(f"Number of classes in test directory ({len(actual_class_names)}) doesn't match model ({num_classes})")
+                            # Try to load from dataset directory
+                            dataset_dir = os.path.join(PROJECT_ROOT, "data", "dataset")
+                            if os.path.exists(dataset_dir):
+                                actual_class_names = [d for d in os.listdir(dataset_dir) if os.path.isdir(os.path.join(dataset_dir, d))]
+                                if len(actual_class_names) == num_classes:
+                                    class_names = actual_class_names
+                                    print(f"Loaded actual class names from dataset directory: {class_names}")
+                except Exception as e:
+                    print(f"Error loading class names from directories: {e}")
+                
+                # ALWAYS use the predefined embryo class names if the number of classes matches
+                # Define the standard embryo class names
+                embryo_class_names = [
+                    "8cell_grade_A", "8cell_grade_B", "8cell_grade_C",
+                    "blastocyst_grade_A", "blastocyst_grade_B", "blastocyst_grade_C",
+                    "error_images", 
+                    "morula_grade_A", "morula_grade_B", "morula_grade_C"
+                ]
+                
+                # If the number of classes matches our predefined list, use it
+                if len(embryo_class_names) == num_classes:
+                    class_names = embryo_class_names
+                    print(f"Using predefined embryo class names: {class_names}")
+                # If we still don't have proper class names, use the default embryo class names
+                elif class_names is None or len(class_names) != num_classes:
+                    # As a last resort, use generic class names
+                    class_names = [f"Class_{i}" for i in range(num_classes)]
+                    print(f"Using generic class names to match {num_classes} classes")
             
             print(f"Model loaded successfully with {num_classes} classes: {class_names}")
             return model, class_names
@@ -214,9 +252,16 @@ class EmbryoPredictor:
             # Create a fallback model and class names
             print("Creating fallback model and class names")
             fallback_model = models.resnet18(weights=None)
-            fallback_model.fc = nn.Linear(512, 5)  # 5 classes as fallback
+            fallback_model.fc = nn.Linear(512, 10)  # 10 classes as fallback (typical for embryo dataset)
             fallback_model = fallback_model.to(self.device).eval()
-            fallback_class_names = [f"Class_{i}" for i in range(5)]
+            
+            # Use predefined embryo class names for fallback
+            fallback_class_names = [
+                "8cell_grade_A", "8cell_grade_B", "8cell_grade_C",
+                "blastocyst_grade_A", "blastocyst_grade_B", "blastocyst_grade_C",
+                "error_images", 
+                "morula_grade_A", "morula_grade_B", "morula_grade_C"
+            ]
             
             return fallback_model, fallback_class_names
             
@@ -229,8 +274,14 @@ class EmbryoPredictor:
                 if isinstance(model, torch.nn.Module):
                     model = model.to(self.device).eval()
                     print("Model loaded directly successfully")
-                    # Assume 10 classes if we can't determine
-                    return model, [f"Class_{i}" for i in range(10)]
+                    # Use predefined embryo class names
+                    embryo_class_names = [
+                        "8cell_grade_A", "8cell_grade_B", "8cell_grade_C",
+                        "blastocyst_grade_A", "blastocyst_grade_B", "blastocyst_grade_C",
+                        "error_images", 
+                        "morula_grade_A", "morula_grade_B", "morula_grade_C"
+                    ]
+                    return model, embryo_class_names
             except Exception as e2:
                 print(f"Failed to load model directly: {e2}")
                 raise e  # Re-raise the original error
