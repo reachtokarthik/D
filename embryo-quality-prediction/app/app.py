@@ -9,6 +9,8 @@ import numpy as np
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_from_directory
 from datetime import datetime
+import markdown
+import bleach
 
 # Get the absolute path to the project root directory
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -535,6 +537,175 @@ def serve_results(filepath):
     full_dir_path = os.path.join(AppConfig.RESULTS_DIR, directory)
     
     return send_from_directory(full_dir_path, filename)
+
+
+@app.route('/docs/<doc_name>')
+def view_docs(doc_name):
+    """Render markdown documentation files as HTML."""
+    # Get parent directory of PROJECT_ROOT
+    PARENT_DIR = os.path.dirname(PROJECT_ROOT)
+    
+    # Define allowed documentation files to prevent directory traversal
+    allowed_docs = {
+        'README': os.path.join(PARENT_DIR, 'README.md'),
+        'WORKFLOW': os.path.join(PARENT_DIR, 'WORKFLOW.md'),
+        'MODEL_EVALUATION': os.path.join(PARENT_DIR, 'MODEL_EVALUATION.md')
+    }
+    
+    # Ensure the requested doc exists and is allowed
+    if doc_name not in allowed_docs:
+        flash(f"Documentation '{doc_name}' not found.", "danger")
+        return redirect(url_for('index'))
+    
+    doc_path = allowed_docs[doc_name]
+    
+    try:
+        # Read the markdown file
+        with open(doc_path, 'r', encoding='utf-8') as f:
+            md_content = f.read()
+        
+        # Convert markdown to HTML
+        html_content = markdown.markdown(
+            md_content,
+            extensions=['fenced_code', 'tables', 'toc']
+        )
+        
+        # Apply custom styling
+        styled_html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{doc_name} - Embryo Quality Prediction</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    padding: 20px;
+                    max-width: 1200px;
+                    margin: 0 auto;
+                }}
+                h1, h2, h3, h4, h5, h6 {{
+                    margin-top: 1.5em;
+                    margin-bottom: 0.75em;
+                    color: #1a3a6c;
+                }}
+                h1 {{
+                    padding-bottom: 0.5em;
+                    border-bottom: 1px solid #eee;
+                }}
+                code {{
+                    background-color: #f5f5f5;
+                    padding: 0.2em 0.4em;
+                    border-radius: 3px;
+                    font-family: Consolas, Monaco, 'Andale Mono', monospace;
+                }}
+                pre {{
+                    background-color: #f8f8f8;
+                    padding: 16px;
+                    border-radius: 6px;
+                    overflow-x: auto;
+                    border: 1px solid #e1e4e8;
+                }}
+                pre code {{
+                    background-color: transparent;
+                    padding: 0;
+                    border-radius: 0;
+                }}
+                blockquote {{
+                    border-left: 4px solid #ddd;
+                    padding: 0 15px;
+                    color: #777;
+                }}
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 20px 0;
+                }}
+                table, th, td {{
+                    border: 1px solid #e1e4e8;
+                }}
+                th, td {{
+                    padding: 8px 16px;
+                    text-align: left;
+                }}
+                th {{
+                    background-color: #f8f8f8;
+                }}
+                tr:nth-child(even) {{
+                    background-color: #f8f8f8;
+                }}
+                .navbar {{
+                    margin-bottom: 30px;
+                    background-color: #4a6fa5;
+                }}
+                .btn-back {{
+                    margin-bottom: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <nav class="navbar navbar-expand-lg navbar-dark">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="/">Embryo Quality Prediction</a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="navbarNav">
+                        <ul class="navbar-nav">
+                            <li class="nav-item">
+                                <a class="nav-link" href="/">Dashboard</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/docs/README">Project Overview</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/docs/WORKFLOW">Workflow Guide</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/docs/MODEL_EVALUATION">Evaluation Guide</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+            
+            <a href="/" class="btn btn-outline-primary btn-back">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+            
+            <div class="doc-content">
+                {html_content}
+            </div>
+            
+            <footer class="mt-5 pt-3 border-top text-muted">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p>Embryo Quality Prediction System</p>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <p>Documentation rendered from Markdown</p>
+                    </div>
+                </div>
+            </footer>
+            
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+        </body>
+        </html>
+        """
+        
+        return styled_html
+        
+    except FileNotFoundError:
+        flash(f"Documentation file not found: {doc_path}", "danger")
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash(f"Error loading documentation: {str(e)}", "danger")
+        return redirect(url_for('index'))
 
 
 if __name__ == '__main__':

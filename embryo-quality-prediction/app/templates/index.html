@@ -69,6 +69,22 @@
             margin-top: 1rem;
             text-align: center;
         }
+        .doc-link {
+            text-decoration: none;
+            color: #4a6fa5;
+            font-weight: 500;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            display: block;
+        }
+        .doc-link:hover {
+            background-color: rgba(74, 111, 165, 0.1);
+            color: #3a5a8f;
+        }
+        .doc-link i {
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body>
@@ -146,6 +162,45 @@
             </div>
         </div>
         
+        <!-- Documentation Links -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-book"></i> Documentation
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <a href="/docs/README" class="doc-link">
+                                    <i class="bi bi-file-earmark-text"></i> Project Overview
+                                </a>
+                                <p class="mt-2 text-muted small">
+                                    Complete documentation of the embryo quality prediction system, including installation, usage, and features.
+                                </p>
+                            </div>
+                            <div class="col-md-4">
+                                <a href="/docs/WORKFLOW" class="doc-link">
+                                    <i class="bi bi-diagram-3"></i> Workflow Documentation
+                                </a>
+                                <p class="mt-2 text-muted small">
+                                    Detailed explanation of the complete workflow pipeline, from data preparation to model deployment.
+                                </p>
+                            </div>
+                            <div class="col-md-4">
+                                <a href="/docs/MODEL_EVALUATION" class="doc-link">
+                                    <i class="bi bi-graph-up"></i> Evaluation System Guide
+                                </a>
+                                <p class="mt-2 text-muted small">
+                                    Guide to the model evaluation dashboard, metrics interpretation, and validation tools.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Performance Overview -->
         {% if history %}
         <div class="row mb-4">
@@ -201,8 +256,8 @@
                             </table>
                         </div>
                         {% else %}
-                        <div class="alert alert-warning">
-                            No trained models found. Train a model first.
+                        <div class="alert alert-warning mb-0">
+                            <i class="bi bi-exclamation-triangle"></i> No models found. Please train a model first.
                         </div>
                         {% endif %}
                     </div>

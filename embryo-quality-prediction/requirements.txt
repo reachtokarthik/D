@@ -23,9 +23,15 @@ Jinja2==3.1.2         # Template engine for Flask
 # Use --ignore-installed for problematic packages
 itsdangerous==2.1.2   # Securely sign data for Flask
 click==8.1.3          # Command-line interface creation toolkit
+markdown==3.4.3       # Markdown to HTML converter for documentation rendering
+bleach==6.0.0         # HTML sanitizing library for secure content rendering
+python-markdown-math==0.8  # Math extension for Python-Markdown
+Pygments==2.15.1      # Syntax highlighting for code blocks in documentation
+Flask-WTF==1.1.1      # Flask integration with WTForms for form handling
 
 # Data Visualization for Dashboard
 plotly==5.15.0        # Interactive visualization library
+chart.js==3.9.1       # JavaScript charting library for data visualization
 # Note: Chart.js is loaded via CDN in the HTML templates, not installed via pip
 
 # Model Evaluation and Metrics
@@ -34,6 +40,8 @@ scipy==1.10.1         # Scientific computing library with statistical functions
 # Utilities
 python-dotenv==1.0.0  # Environment variable management
 requests==2.31.0      # HTTP library for API requests
+watchdog==3.0.0       # File system events monitoring for development
+gunicorn==21.2.0      # WSGI HTTP server for production deployment
 
 # Development Tools - commented out for Colab compatibility
 # ipython==8.14.0      # Enhanced interactive Python shell
